@@ -148,6 +148,12 @@ describe("provider routing", () => {
       "openrouter/anthropic/claude-sonnet-4.6",
     );
   });
+  it("declares image input for OpenCode gateway models so attached images are readable", () => {
+    const route = aiProviderRoutingSchema.parse({ kind: "gateway", protocol: "chat", auth: "bearer", baseUrl: "https://gateway.example/v1" });
+    const projected = managedProviderRouting(route, "opencode_local", "fixture-secret", "Daily-use");
+    const cfg = JSON.parse(projected.env.OPENCODE_CONFIG_CONTENT!);
+    expect(cfg.provider.paperclip.models["Daily-use"].modalities.input).toEqual(["text", "image"]);
+  });
   it("projects only a Bedrock API key and rejects general AWS access keys", () => {
     const routing = aiProviderRoutingSchema.parse({
       kind: "bedrock",
