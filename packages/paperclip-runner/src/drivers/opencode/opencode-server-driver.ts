@@ -2382,6 +2382,7 @@ async function startRuntime(input: {
           models: {
             [providerModelId]: {
               name: providerModelId,
+              ...(providerProxy ? { modalities: { input: ["text", "image"], output: ["text"] } } : {}),
               ...(modelProvider === "openrouter"
                 ? { variants: {
                     "paperclip-default": {},

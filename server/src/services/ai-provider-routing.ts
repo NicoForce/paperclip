@@ -62,7 +62,9 @@ export function managedProviderRouting(
             ? { npm: "@ai-sdk/openai-compatible", name: "Paperclip connection" }
             : {}),
           options: { baseURL: baseUrl, apiKey: credential, ...(openrouter ? { headers: OPENROUTER_ATTRIBUTION_HEADERS } : {}) },
-          models: id ? { [id]: { name: id } } : {},
+          models: id
+            ? { [id]: { name: id, ...(provider === "paperclip" ? { modalities: { input: ["text", "image"], output: ["text"] } } : {}) } }
+            : {},
         },
       },
       enabled_providers: [provider],
