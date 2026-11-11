@@ -1288,6 +1288,18 @@ describeEmbeddedPostgres("tool gateway acceptance", () => {
         protocolMethod: "initialize",
       });
 
+      const toolsOnly = await gateway.createNamedGatewayToken({
+        companyId: company.id,
+        gatewayId: created.id,
+        body: { name: "Tools only", clientLabel: "Tools only", allowedActions: ["tools/list", "tools/call"] },
+      });
+      const toolsOnlyInit = await request(app)
+        .post(endpoint)
+        .set("authorization", `Bearer ${toolsOnly.token}`)
+        .send({ jsonrpc: "2.0", id: 1, method: "initialize" })
+        .expect(200);
+      expect(toolsOnlyInit.body.result.capabilities).toEqual({ tools: {} });
+
       await request(app)
         .post(endpoint)
         .set("authorization", `Bearer ${tokenA.token}`)
