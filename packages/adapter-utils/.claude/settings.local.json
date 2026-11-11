@@ -1,0 +1,21 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(/paperclip/instances/default/projects/a6516824-0006-4f61-857e-43c94b48383b/e64d4ca1-9643-40bc-b5d2-7fbaa98877f2/paperclip/packages/adapter-utils/scripts/paperclip-issue-update.sh:*)",
+      "Bash(/paperclip/instances/default/projects/a6516824-0006-4f61-857e-43c94b48383b/e64d4ca1-9643-40bc-b5d2-7fbaa98877f2/paperclip/packages/adapter-utils/scripts/paperclip:*)",
+      "Bash(curl:*)",
+      "Bash(env)",
+      "Bash(env:*)"
+    ],
+    "additionalDirectories": [
+      "/tmp/paperclip-ai-a6516824-0006-4f61-857e-43c94b48383b-3e5b015e-8ccc-4f1d-bbbe-46cb583acada-zEwyOg/.paperclip/instances/default/companies/company-1",
+      "/tmp/paperclip-ai-a6516824-0006-4f61-857e-43c94b48383b-3e5b015e-8ccc-4f1d-bbbe-46cb583acada-zEwyOg/.paperclip/instances/default/companies/company-1/acp-engine/agents/agent-1",
+      "/tmp/paperclip-run-hom-13-1e183599-251-dgO0Iz/paperclip-acpx-skills-3ypDYX/state",
+      "/tmp/paperclip-run-hom-13-1e183599-251-dgO0Iz/paperclip-acpx-skills-VSGnNL/state",
+      "/tmp/paperclip-run-hom-13-1e183599-251-dgO0Iz/paperclip-acpx-skills-X5e99t/state",
+      "/tmp/paperclip-run-hom-13-1e183599-251-dgO0Iz/paperclip-acpx-skills-ghlL6J/state",
+      "/tmp/paperclip-run-hom-13-1e183599-251-dgO0Iz/paperclip-acpx-skills-zNl7Qi/state"
+    ],
+    "defaultMode": "default"
+  }
+}

@@ -2005,7 +2005,7 @@ async function buildRuntime(input: {
   }));
   const mcpServers: NonNullable<AcpRuntimeOptions["mcpServers"]> = runtimeMcpServers.map((server) => ({
     type: "http",
-    name: server.name,
+    name: server.name.trim().replace(/[^A-Za-z0-9_.:-]+/g, "_").replace(/^[^A-Za-z_]+/, "_").slice(0, 64) || "paperclip_mcp",
     url: server.url,
     headers: [{ name: "Authorization", value: `Bearer ${server.token}` }],
   }));
