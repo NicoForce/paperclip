@@ -154,6 +154,27 @@ describe("provider routing", () => {
     const cfg = JSON.parse(projected.env.OPENCODE_CONFIG_CONTENT!);
     expect(cfg.provider.paperclip.models["Daily-use"].modalities.input).toEqual(["text", "image"]);
   });
+  it("projects Messages gateways to OpenCode through the Anthropic SDK so cache breakpoints apply", () => {
+    for (const baseUrl of ["https://gateway.example/v1", "https://gateway.example"]) {
+      const route = aiProviderRoutingSchema.parse({ kind: "gateway", protocol: "messages", auth: "bearer", baseUrl });
+      expect(isAiConnectionCompatible({ provider: "openai", method: "api_key", routing: route }, "opencode_local")).toBe(true);
+      const projected = managedProviderRouting(route, "opencode_local", "fixture-secret", "Daily-use");
+      const cfg = JSON.parse(projected.env.OPENCODE_CONFIG_CONTENT!);
+      expect(cfg.provider.paperclip.npm).toBe("@ai-sdk/anthropic");
+      expect(cfg.provider.paperclip.options.baseURL).toBe("https://gateway.example/v1");
+      expect(cfg.provider.paperclip.options.headers).toEqual({ Authorization: "Bearer fixture-secret" });
+      expect(projected.env.PAPERCLIP_AI_PROVIDER_URL).toBe("https://gateway.example/v1");
+      expect(projected.config.model).toBe("paperclip/Daily-use");
+    }
+    const apiKey = aiProviderRoutingSchema.parse({ kind: "gateway", protocol: "messages", auth: "api_key", baseUrl: "https://gateway.example/v1" });
+    const cfg = JSON.parse(managedProviderRouting(apiKey, "opencode_local", "k", "m").env.OPENCODE_CONFIG_CONTENT!);
+    expect(cfg.provider.paperclip.options.headers).toBeUndefined();
+  });
+  it("keeps Chat gateways on the OpenAI-compatible SDK for OpenCode", () => {
+    const route = aiProviderRoutingSchema.parse({ kind: "gateway", protocol: "chat", auth: "bearer", baseUrl: "https://gateway.example/v1" });
+    const cfg = JSON.parse(managedProviderRouting(route, "opencode_local", "k", "m").env.OPENCODE_CONFIG_CONTENT!);
+    expect(cfg.provider.paperclip.npm).toBe("@ai-sdk/openai-compatible");
+  });
   it("projects only a Bedrock API key and rejects general AWS access keys", () => {
     const routing = aiProviderRoutingSchema.parse({
       kind: "bedrock",
