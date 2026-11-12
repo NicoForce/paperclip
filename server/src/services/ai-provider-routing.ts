@@ -52,6 +52,9 @@ export function managedProviderRouting(
       env.PAPERCLIP_AI_PROVIDER_KEY = credential;
       env.PAPERCLIP_AI_PROVIDER_URL = baseUrl;
     }
+    const anthropic = provider === "paperclip" && route.protocol === "messages";
+    const providerBaseUrl = anthropic && !/\/v1$/.test(baseUrl) ? `${baseUrl}/v1` : baseUrl;
+    if (provider === "paperclip") env.PAPERCLIP_AI_PROVIDER_URL = providerBaseUrl;
     const id = model.startsWith(`${provider}/`)
       ? model.slice(provider.length + 1)
       : model;
@@ -59,9 +62,14 @@ export function managedProviderRouting(
       provider: {
         [provider]: {
           ...(provider === "paperclip"
-            ? { npm: "@ai-sdk/openai-compatible", name: "Paperclip connection" }
+            ? { npm: anthropic ? "@ai-sdk/anthropic" : "@ai-sdk/openai-compatible", name: "Paperclip connection" }
             : {}),
-          options: { baseURL: baseUrl, apiKey: credential, ...(openrouter ? { headers: OPENROUTER_ATTRIBUTION_HEADERS } : {}) },
+          options: {
+            baseURL: providerBaseUrl,
+            apiKey: credential,
+            ...(openrouter ? { headers: OPENROUTER_ATTRIBUTION_HEADERS } : {}),
+            ...(anthropic && route.auth === "bearer" ? { headers: { Authorization: `Bearer ${credential}` } } : {}),
+          },
           models: id
             ? { [id]: { name: id, ...(provider === "paperclip" ? { modalities: { input: ["text", "image"], output: ["text"] } } : {}) } }
             : {},
