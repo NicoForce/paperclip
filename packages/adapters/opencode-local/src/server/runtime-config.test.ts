@@ -430,4 +430,39 @@ describe("prepareOpenCodeRuntimeConfig", () => {
     expect(config.provider.openrouter.options.headers["HTTP-Referer"]).toBe("https://paperclip.ing");
     await prepared.cleanup();
   });
+
+  it("restricts skills from PAPERCLIP_OPENCODE_SKILL_ALLOW and _DENY", async () => {
+    const configHome = await makeConfigHome({ permission: { read: "allow" } });
+    const prepared = await prepareOpenCodeRuntimeConfig({
+      env: {
+        XDG_CONFIG_HOME: configHome,
+        PAPERCLIP_OPENCODE_SKILL_ALLOW: "paperclip, check-*",
+        PAPERCLIP_OPENCODE_SKILL_DENY: "check-pr",
+      },
+      config: {},
+    });
+    cleanupPaths.add(prepared.env.XDG_CONFIG_HOME);
+    const written = JSON.parse(
+      await fs.readFile(path.join(prepared.env.XDG_CONFIG_HOME, "opencode", "opencode.json"), "utf8"),
+    ) as { permission: { "*": string; skill: Record<string, string> } };
+    expect(written.permission["*"]).toBe("allow");
+    expect(written.permission.skill).toEqual({
+      "*": "deny",
+      paperclip: "allow",
+      "check-*": "allow",
+      "check-pr": "deny",
+    });
+    await prepared.cleanup();
+  });
+
+  it("leaves permission untouched when no skill env is set", async () => {
+    const configHome = await makeConfigHome({ permission: { read: "allow" } });
+    const prepared = await prepareOpenCodeRuntimeConfig({ env: { XDG_CONFIG_HOME: configHome }, config: {} });
+    cleanupPaths.add(prepared.env.XDG_CONFIG_HOME);
+    const written = JSON.parse(
+      await fs.readFile(path.join(prepared.env.XDG_CONFIG_HOME, "opencode", "opencode.json"), "utf8"),
+    ) as { permission: unknown };
+    expect(written.permission).toBe("allow");
+    await prepared.cleanup();
+  });
 });
