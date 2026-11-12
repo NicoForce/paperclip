@@ -21,6 +21,19 @@ function resolveXdgConfigHome(env: Record<string, string>): string {
   );
 }
 
+function parseSkillList(raw: string | undefined): string[] {
+  if (!raw) return [];
+  return raw.split(",").map((entry) => entry.trim()).filter((entry) => entry.length > 0);
+}
+
+function buildSkillPermission(allow: string[], deny: string[]): Record<string, string> | null {
+  if (allow.length === 0 && deny.length === 0) return null;
+  const rules: Record<string, string> = { "*": allow.length > 0 ? "deny" : "allow" };
+  for (const name of allow) rules[name] = "allow";
+  for (const name of deny) rules[name] = "deny";
+  return rules;
+}
+
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -252,6 +265,24 @@ export async function prepareOpenCodeRuntimeConfig(input: {
     ...existingConfig,
     ...(skipPermissions ? { permission: "allow" } : {}),
   };
+  // Hide skills from OpenCode's skill list (token cost) via permission.skill.
+  // PAPERCLIP_OPENCODE_SKILL_ALLOW (comma names/globs): only these are visible.
+  // PAPERCLIP_OPENCODE_SKILL_DENY: always hidden; wins over allow.
+  const skillRules = buildSkillPermission(
+    parseSkillList(input.env.PAPERCLIP_OPENCODE_SKILL_ALLOW ?? process.env.PAPERCLIP_OPENCODE_SKILL_ALLOW),
+    parseSkillList(input.env.PAPERCLIP_OPENCODE_SKILL_DENY ?? process.env.PAPERCLIP_OPENCODE_SKILL_DENY),
+  );
+  if (skillRules) {
+    const basePermission = nextConfig.permission;
+    const permissionObject: Record<string, unknown> = isPlainObject(basePermission)
+      ? { ...basePermission }
+      : typeof basePermission === "string"
+        ? { "*": basePermission }
+        : {};
+    permissionObject.skill = skillRules;
+    nextConfig.permission = permissionObject;
+    notes.push(`Restricted OpenCode skills via permission.skill (${Object.keys(skillRules).length - 1} rule(s)).`);
+  }
   const inlineContent = input.env.OPENCODE_CONFIG_CONTENT ?? process.env.OPENCODE_CONFIG_CONTENT;
   let inlineConfig: Record<string, unknown> | undefined;
   if (inlineContent) {
