@@ -3,6 +3,16 @@
 Paperclip's MCP permission work uses deterministic fixture servers so policy
 logic can be tested without real customer credentials or live integrations.
 
+The built-in fixture tools (`mcp-remote-fixture:*`, `mcp-stdio-fixture:*`,
+`paperclip-self:*`) are hidden from the tool gateway unless
+`PAPERCLIP_ENABLE_MCP_FIXTURES=true`. Set it on any Paperclip instance you
+exercise with fixtures. Production instances should leave it unset to avoid
+spending ~1.3k prompt tokens per run on test stubs.
+
+The `Paperclip projects` MCP server injected into agent runs can be disabled
+with `PAPERCLIP_ENABLE_PROJECT_TOOLS_MCP=false` (default on) to save ~6k prompt
+tokens per run for agents that never create projects.
+
 Run the local smoke:
 
 ```sh

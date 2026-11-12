@@ -1346,7 +1346,8 @@ export function createToolGatewayService(
   }
 
   function allTools(): ToolGatewayDescriptor[] {
-    return [...BUILTIN_TOOLS, ...pluginTools()];
+    const fixturesEnabled = /^(1|true|yes|on)$/i.test(process.env.PAPERCLIP_ENABLE_MCP_FIXTURES ?? "");
+    return [...(fixturesEnabled ? BUILTIN_TOOLS : []), ...pluginTools()];
   }
 
   function connectedMcpConnectionFilter(companyId: string) {
