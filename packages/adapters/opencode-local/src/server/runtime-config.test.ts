@@ -185,6 +185,25 @@ describe("prepareOpenCodeRuntimeConfig", () => {
     await prepared.cleanup();
   });
 
+  it("denies built-in tools and disables the title agent from env", async () => {
+    const configHome = await makeConfigHome({ permission: { read: "allow" } });
+    const prepared = await prepareOpenCodeRuntimeConfig({
+      env: {
+        XDG_CONFIG_HOME: configHome,
+        PAPERCLIP_OPENCODE_TOOL_DENY: "question, todowrite,task",
+        PAPERCLIP_OPENCODE_DISABLE_TITLE: "true",
+      },
+      config: {},
+    });
+    cleanupPaths.add(prepared.env.XDG_CONFIG_HOME);
+    const runtimeConfig = JSON.parse(
+      await fs.readFile(path.join(prepared.env.XDG_CONFIG_HOME, "opencode", "opencode.json"), "utf8"),
+    ) as { permission: Record<string, string>; agent: { title: { disable: boolean } } };
+    expect(runtimeConfig.permission).toMatchObject({ question: "deny", todowrite: "deny", task: "deny" });
+    expect(runtimeConfig.agent.title.disable).toBe(true);
+    await prepared.cleanup();
+  });
+
   it("pins small_model from PAPERCLIP_OPENCODE_SMALL_MODEL", async () => {
     const configHome = await makeConfigHome({ permission: { read: "allow" } });
     const prepared = await prepareOpenCodeRuntimeConfig({
