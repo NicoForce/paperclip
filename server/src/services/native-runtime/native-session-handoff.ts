@@ -50,6 +50,8 @@ export function renderNativeSessionHandoff(input: {
 export async function buildNativeSessionHandoff(input: {
   db: Db; companyId: string; issueId: string; agentId: string; before: Date;
   throughCommentId?: string | null;
+  skipEntryKinds?: readonly string[];
+  skipDocumentKeys?: readonly string[];
 }): Promise<string | null> {
   const { db, companyId, issueId, agentId } = input;
   const [issue] = await db.select({
@@ -166,6 +168,14 @@ export async function buildNativeSessionHandoff(input: {
     const { executionPolicy, ...entry } = row;
     const sourceTrust = historicalTrust(row.id, executionPolicy);
     entries.push({ ...sanitizeQuarantinedCommentForHigherTrust({ ...entry, sourceTrust }), kind: "run_summary" });
+  }
+  const skipKinds = new Set(input.skipEntryKinds ?? []);
+  const skipKeys = new Set(input.skipDocumentKeys ?? []);
+  if (skipKinds.size || skipKeys.size) {
+    for (let i = entries.length - 1; i >= 0; i--) {
+      const entry = entries[i]!;
+      if (skipKinds.has(entry.kind) || (entry.kind === "document" && typeof entry.key === "string" && skipKeys.has(entry.key))) entries.splice(i, 1);
+    }
   }
   if (!entries.length) return null;
   const omittedEntriesAtLeast = Number(recent.length > LIMIT) + Number(decisions.length > 8) + Number(replies.length > 4) + Number(savedDocuments.length > 3) + Number(runSummaries.length > 2);

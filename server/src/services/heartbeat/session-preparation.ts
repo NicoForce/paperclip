@@ -67,6 +67,15 @@ export interface HeartbeatSessionPreparationInput {
   getLatestAgentConfigRevision: RunState["getLatestAgentConfigRevision"];
 }
 
+const DEDUPED_HANDOFF_KINDS = ["original_request", "message", "agent_reply", "resolved_interaction", "run_summary"] as const;
+
+function handoffDedupeOptions(context: Record<string, unknown>) {
+  if (!/^(1|true|yes|on)$/i.test(process.env.PAPERCLIP_HANDOFF_DEDUPE_WAKE_HISTORY ?? "")) return {};
+  const continuation = context.executionContinuation as { coverage?: { kind?: unknown } } | null | undefined;
+  if (continuation?.coverage?.kind !== "full_task_history") return {};
+  return { skipEntryKinds: DEDUPED_HANDOFF_KINDS, skipDocumentKeys: ["continuation-summary", "plan"] };
+}
+
 function readNonEmptyString(value: unknown): string | null {
   return typeof value === "string" && value.trim().length > 0 ? value : null;
 }
@@ -193,6 +202,7 @@ export async function prepareHeartbeatSession(db: Db, input: HeartbeatSessionPre
   const getFreshSessionHandoff = issueRef ? createNativeSessionHandoffLoader({
     db, companyId: agent.companyId, issueId: issueRef.id, agentId: agent.id, before: run.createdAt,
     throughCommentId: readNonEmptyString(context.conversationReplayThroughCommentId) ?? (context.interactionKind ? null : wakeCommentId),
+    ...handoffDedupeOptions(context),
   }) : undefined;
   const previousSessionParams =
     explicitResumeSessionParams ??

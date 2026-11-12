@@ -120,6 +120,13 @@ const support = await getEmbeddedPostgresTestSupport();
     expect(await buildNativeSessionHandoff({ db, companyId: randomUUID(), issueId, agentId, before: new Date(20_000) })).toBeNull();
     expect(await buildNativeSessionHandoff({ db, companyId, issueId, agentId: randomUUID(), before: new Date(20_000) })).toBeNull();
   });
+  it("omits entries already carried by the wake payload when requested", async () => {
+    const result = await buildNativeSessionHandoff({ db, companyId, issueId, agentId, before: new Date(20_000),
+      skipEntryKinds: ["original_request", "message", "agent_reply", "resolved_interaction", "run_summary"], skipDocumentKeys: ["plan"] });
+    expect(result).not.toContain("Build a GitHub PR review bot");
+    expect(result).not.toContain("Repository research complete");
+    expect(result).not.toContain("Saved plan");
+  });
   it("honors the exact wake-comment cutoff when building a fresh replay", async () => {
     const result = await buildNativeSessionHandoff({ db, companyId, issueId, agentId, before: new Date(20_000), throughCommentId: requestId });
     expect(result).toContain("Build a GitHub PR review bot");
