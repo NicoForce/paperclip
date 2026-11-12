@@ -1,4 +1,6 @@
 import fs from "node:fs";
+
+process.env.PAPERCLIP_ENABLE_MCP_FIXTURES ??= "true";
 import { createIsolatedTestHome } from "./helpers/isolated-test-home.js";
 import { createRequire } from "node:module";
 import type { AddressInfo, Server as NetServer } from "node:net";
