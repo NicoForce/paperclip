@@ -1557,6 +1557,8 @@ const BOARD_ONLY_OPERATIONS = new Set([
   "GET /api/companies/{companyId}/tools/profiles",
   "POST /api/companies/{companyId}/tools/profiles",
   "GET /api/companies/{companyId}/tools/profiles/effective/agents/{agentId}",
+  "GET /api/agents/me/tools/effective",
+  "GET /api/agents/me/mcp-diagnostics",
   "GET /api/tool-profiles/{profileId}/new-tools",
   "PATCH /api/tool-profiles/{profileId}",
   "POST /api/tool-profiles/{profileId}/duplicate",
@@ -11735,6 +11737,20 @@ registerCurrentRoute({
   path: "/api/companies/{companyId}/tools/profiles/effective/agents/{agentId}",
   tags: ["tool-access"],
   summary: "Resolve effective tool access profiles for an agent",
+});
+
+registerCurrentRoute({
+  method: "get",
+  path: "/api/agents/me/tools/effective",
+  tags: ["tool-access"],
+  summary: "Read the calling agent's effective tool profiles and installed connections",
+});
+
+registerCurrentRoute({
+  method: "get",
+  path: "/api/agents/me/mcp-diagnostics",
+  tags: ["tool-access"],
+  summary: "Diagnose runtime MCP delivery for the calling agent",
 });
 
 registerCurrentRoute({
