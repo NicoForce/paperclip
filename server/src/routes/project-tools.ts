@@ -15,7 +15,8 @@ export function projectToolRoutes(db: Db) {
     const send = (result: unknown) => res.json({ jsonrpc: "2.0", id, result });
     if (method === "initialize") return send({ protocolVersion: "2025-03-26", capabilities: { tools: { listChanged: false } }, serverInfo: { name: "paperclip-project-tools", version: "1" } });
     if (method === "notifications/initialized") return res.status(202).end();
-    const definitions = projectToolDefinitions(context.issue.workMode, true);
+    const deniedTools = new Set((process.env.PAPERCLIP_PROJECT_TOOLS_DENY ?? "").split(",").map(name => name.trim()).filter(Boolean));
+    const definitions = projectToolDefinitions(context.issue.workMode, true).filter(tool => !deniedTools.has(tool.name));
     if (method === "tools/list") return send({ tools: definitions });
     if (method !== "tools/call") return res.json({ jsonrpc: "2.0", id, error: { code: -32601, message: "Method not found" } });
     try {

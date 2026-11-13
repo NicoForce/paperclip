@@ -272,16 +272,31 @@ export async function prepareOpenCodeRuntimeConfig(input: {
     parseSkillList(input.env.PAPERCLIP_OPENCODE_SKILL_ALLOW ?? process.env.PAPERCLIP_OPENCODE_SKILL_ALLOW),
     parseSkillList(input.env.PAPERCLIP_OPENCODE_SKILL_DENY ?? process.env.PAPERCLIP_OPENCODE_SKILL_DENY),
   );
-  if (skillRules) {
+  // PAPERCLIP_OPENCODE_TOOL_DENY (comma names/globs, e.g. "question,todowrite,task,lsp"):
+  // OpenCode hides tools denied with pattern "*", so their schemas stop costing tokens.
+  const toolDeny = parseSkillList(input.env.PAPERCLIP_OPENCODE_TOOL_DENY ?? process.env.PAPERCLIP_OPENCODE_TOOL_DENY);
+  if (skillRules || toolDeny.length > 0) {
     const basePermission = nextConfig.permission;
     const permissionObject: Record<string, unknown> = isPlainObject(basePermission)
       ? { ...basePermission }
       : typeof basePermission === "string"
         ? { "*": basePermission }
         : {};
-    permissionObject.skill = skillRules;
+    if (skillRules) {
+      permissionObject.skill = skillRules;
+      notes.push(`Restricted OpenCode skills via permission.skill (${Object.keys(skillRules).length - 1} rule(s)).`);
+    }
+    for (const tool of toolDeny) permissionObject[tool] = "deny";
+    if (toolDeny.length > 0) notes.push(`Denied OpenCode built-in tools: ${toolDeny.join(", ")}.`);
     nextConfig.permission = permissionObject;
-    notes.push(`Restricted OpenCode skills via permission.skill (${Object.keys(skillRules).length - 1} rule(s)).`);
+  }
+  // PAPERCLIP_OPENCODE_DISABLE_TITLE=true removes OpenCode's hidden "title" agent, so
+  // the per-session title-generation LLM call is skipped (titles are unused headless).
+  if (/^(1|true|yes|on)$/i.test((input.env.PAPERCLIP_OPENCODE_DISABLE_TITLE ?? process.env.PAPERCLIP_OPENCODE_DISABLE_TITLE ?? "").trim())) {
+    const agentConfig = isPlainObject(nextConfig.agent) ? { ...nextConfig.agent } : {};
+    agentConfig.title = { ...(isPlainObject(agentConfig.title) ? agentConfig.title : {}), disable: true };
+    nextConfig.agent = agentConfig;
+    notes.push("Disabled OpenCode title agent (no title-generation call).");
   }
   const inlineContent = input.env.OPENCODE_CONFIG_CONTENT ?? process.env.OPENCODE_CONFIG_CONTENT;
   let inlineConfig: Record<string, unknown> | undefined;
