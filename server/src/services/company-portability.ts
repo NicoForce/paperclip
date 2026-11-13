@@ -3921,9 +3921,11 @@ export function companyPortabilityService(db: Db, storage?: StorageService) {
 
     const allAgentRows = include.agents ? await agents.list(companyId, { includeTerminated: true }) : [];
     const agentSelection = resolvePortableExportAgentSelection(allAgentRows, input.agents, include.agents);
-    const companySkillRowsRaw = include.skills ? await companySkills.listFull(companyId) : [];
-    if (companySkillRowsRaw.some(skill => skill.accessSourceId)) {
-      throw unprocessable("Project-restricted skills cannot be exported until the package can preserve their project access.");
+    const companySkillRowsAll = include.skills ? await companySkills.listFull(companyId) : [];
+    const companySkillRowsRaw = companySkillRowsAll.filter((skill) => !skill.accessSourceId);
+    const restrictedSkillCount = companySkillRowsAll.length - companySkillRowsRaw.length;
+    if (restrictedSkillCount > 0) {
+      warnings.push(`Skipped ${restrictedSkillCount} project-restricted skill${restrictedSkillCount === 1 ? "" : "s"} from export; project access cannot be preserved in the package.`);
     }
     const managedSkillRows = companySkillRowsRaw.filter((skill) => managedSkillIds.has(skill.id));
     const companySkillRows = companySkillRowsRaw.filter((skill) => !managedSkillIds.has(skill.id));
