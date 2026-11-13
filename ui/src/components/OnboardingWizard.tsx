@@ -1865,6 +1865,16 @@ function OnboardingWizardInner({
     setRouteDismissed(true);
   }
 
+  function handleSkipConnect() {
+    if (!createdCompanyId || loading) return;
+    const prefix = createdCompanyPrefix;
+    setSelectedCompanyId(createdCompanyId, { source: "route_sync" });
+    reset();
+    closeOnboarding();
+    setRouteDismissed(true);
+    navigate(prefix ? `/${prefix}/dashboard` : "/dashboard");
+  }
+
   /**
    * Whether the company an async handler started for is still the one in hand.
    *
@@ -3495,6 +3505,11 @@ function OnboardingWizardInner({
                         : step === 4
                           ? connectCta.disabled || loading
                           : loading || launchStateIncomplete
+                  }
+                  onSkip={
+                    step === 4 && createdCompanyId && connectPhase === "idle" && !loading
+                      ? handleSkipConnect
+                      : undefined
                   }
                   onPrimary={() => {
                     if (step === 1) void handleCreateCompany();
