@@ -409,7 +409,6 @@ export interface ToolConnectionRemovalSummary {
   runtimeSlotsStopped: number;
   gatewayTokensRevoked: number;
   gatewaySessionsRevoked: number;
-  applicationArchived: boolean;
   externalCredentialCleanup?: {
     provider: "vercel_connect";
     userSubjectsAttempted: number;

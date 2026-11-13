@@ -10,7 +10,7 @@ import { browserUseService } from "../../browser-use.js";
 import { emitConnectionUpdated } from "../../connector-telemetry.js";
 import { and, eq, inArray, isNull, ne, sql } from "drizzle-orm";
 import type { Db } from "@paperclipai/db";
-import { connectionGrants, connectionTokenIssuances, companySecretBindings, companySecrets, userSecretDefinitions, userSecretDeclarations, toolApplications, toolCatalogEntries, toolConnectionInstalls, toolConnections, toolOauthStates, toolGatewaySessions, toolMcpGateways, toolMcpGatewayTokens, toolProfileBindings, toolProfileEntries, toolProfiles, toolRuntimeSlots } from "@paperclipai/db";
+import { connectionGrants, connectionTokenIssuances, companySecretBindings, companySecrets, userSecretDefinitions, userSecretDeclarations, toolCatalogEntries, toolConnectionInstalls, toolConnections, toolOauthStates, toolGatewaySessions, toolMcpGateways, toolMcpGatewayTokens, toolProfileBindings, toolProfileEntries, toolProfiles, toolRuntimeSlots } from "@paperclipai/db";
 import type { ToolConnectionRemovalResult, ToolConnectionRemovalSummary } from "@paperclipai/shared";
 import { notFound } from "../../../errors.js";
 import { logger } from "../../../middleware/logger.js";
@@ -536,43 +536,13 @@ async function removeConnection(
       .returning({ id: connectionTokenIssuances.id });
 
     const archived = await db.transaction(async (tx) => {
-      await tx.select({ id: toolApplications.id }).from(toolApplications)
-        .where(and(eq(toolApplications.id, connection.applicationId), eq(toolApplications.companyId, connection.companyId)))
-        .for("update");
       const [updatedConnection] = await tx
         .update(toolConnections)
         .set({ status: "archived", enabled: false, updatedAt: now })
         .where(eq(toolConnections.id, connection.id))
         .returning();
       if (!updatedConnection) throw notFound("Tool connection not found");
-
-      const remainingConnections = await tx
-        .select({ id: toolConnections.id })
-        .from(toolConnections)
-        .where(
-          and(
-            eq(toolConnections.applicationId, updatedConnection.applicationId),
-            ne(toolConnections.status, "archived"),
-          ),
-        )
-        .limit(1);
-
-      let applicationArchived = false;
-      if (remainingConnections.length === 0) {
-        const [application] = await tx
-          .update(toolApplications)
-          .set({ status: "archived", archivedAt: now, updatedAt: now })
-          .where(
-            and(
-              eq(toolApplications.id, updatedConnection.applicationId),
-              ne(toolApplications.status, "archived"),
-            ),
-          )
-          .returning({ id: toolApplications.id });
-        applicationArchived = Boolean(application);
-      }
-
-      return { connection: updatedConnection, applicationArchived };
+      return { connection: updatedConnection };
     });
     emitConnectionUpdated(archived.connection, connection, "archive");
 
@@ -649,7 +619,6 @@ async function removeConnection(
         runtimeSlotsStopped,
         gatewayTokensRevoked,
         gatewaySessionsRevoked,
-        applicationArchived: archived.applicationArchived,
         externalCredentialCleanup,
       },
     };
