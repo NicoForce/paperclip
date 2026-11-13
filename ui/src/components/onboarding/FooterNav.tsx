@@ -29,6 +29,8 @@ export function FooterNav({
   loadingLabel,
   primaryIcon,
   onPrimary,
+  onSkip,
+  skipLabel = "Skip for now",
 }: {
   onBack?: () => void;
   primaryLabel: string;
@@ -44,6 +46,8 @@ export function FooterNav({
    */
   primaryIcon?: FooterPrimaryIcon;
   onPrimary: () => void;
+  onSkip?: () => void;
+  skipLabel?: string;
 }) {
   const label = loading && loadingLabel ? loadingLabel : primaryLabel;
   const icon: FooterPrimaryIcon = primaryIcon ?? (loading ? "spinner" : "arrow");
@@ -80,6 +84,18 @@ export function FooterNav({
         Without `popLayout` the two labels would briefly sit side by side and
         the button would widen to hold both before shrinking back.
       */}
+      <div className="flex items-center gap-2">
+      {onSkip ? (
+        <Button
+          variant="ghost"
+          size="lg"
+          className="rounded-full px-5"
+          onClick={onSkip}
+          disabled={loading}
+        >
+          {skipLabel}
+        </Button>
+      ) : null}
       <motion.div layout transition={CTA_WIDTH} className="min-w-0">
         <Button
           size="lg"
@@ -115,6 +131,7 @@ export function FooterNav({
           </motion.span>
         </Button>
       </motion.div>
+      </div>
     </div>
   );
 }
