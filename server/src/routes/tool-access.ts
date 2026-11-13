@@ -152,6 +152,41 @@ function classifyConnectionUpdate(
   return events;
 }
 
+export function toAgentConnectionView(connection: {
+  id: string; applicationId: string; name: string; connectionKind?: unknown; connectionPurpose?: unknown;
+  transport?: unknown; authKind?: unknown; status?: string; enabled?: boolean; healthStatus?: unknown;
+  healthMessage?: string | null; lastCatalogRefreshAt?: unknown; installs?: unknown[];
+}) {
+  return {
+    id: connection.id,
+    applicationId: connection.applicationId,
+    name: connection.name,
+    connectionKind: connection.connectionKind,
+    connectionPurpose: connection.connectionPurpose,
+    transport: connection.transport,
+    authKind: connection.authKind,
+    status: connection.status,
+    enabled: connection.enabled,
+    healthStatus: connection.healthStatus,
+    healthMessage: connection.healthMessage ?? null,
+    lastCatalogRefreshAt: connection.lastCatalogRefreshAt ?? null,
+    installs: connection.installs ?? [],
+  };
+}
+
+export function toAgentApplicationView(application: {
+  id: string; name: string; type?: unknown; status?: unknown; enabled?: unknown; description?: string | null;
+}) {
+  return {
+    id: application.id,
+    name: application.name,
+    type: application.type,
+    status: application.status,
+    enabled: application.enabled,
+    description: application.description ?? null,
+  };
+}
+
 export function filterVisibleToolConnections<T extends {
   status?: string;
   createdByUserId?: string | null;
@@ -515,6 +550,16 @@ function connectorEnrollmentPrincipal(req: Request): string {
   }
 
   const access = accessService(db);
+
+  async function assertAgentCanReadToolConfig(req: Request, companyId: string) {
+    assertCompanyAccess(req, companyId);
+    const decision = await access.decide({
+      actor: req.actor,
+      action: "agent_config:read",
+      resource: { type: "company", companyId },
+    });
+    if (!decision.allowed) throw forbidden(decision.explanation);
+  }
 
   async function assertBoardToolPermission(req: Request, companyId: string, permissionKey: PermissionKey) {
     assertBoard(req);
@@ -1604,8 +1649,13 @@ function connectorEnrollmentPrincipal(req: Request): string {
   });
 
   router.get("/companies/:companyId/tools/applications", async (req, res) => {
-    assertBoard(req);
     const companyId = req.params.companyId as string;
+    if (req.actor.type === "agent") {
+      await assertAgentCanReadToolConfig(req, companyId);
+      res.json({ applications: (await svc.listApplications(companyId)).map(toAgentApplicationView) });
+      return;
+    }
+    assertBoard(req);
     assertCompanyAccess(req, companyId);
     res.json({ applications: await svc.listApplications(companyId) });
   });
@@ -1669,8 +1719,14 @@ function connectorEnrollmentPrincipal(req: Request): string {
   });
 
   router.get("/companies/:companyId/tools/connections", async (req, res) => {
-    assertBoard(req);
     const companyId = req.params.companyId as string;
+    if (req.actor.type === "agent") {
+      await assertAgentCanReadToolConfig(req, companyId);
+      const all = await svc.listConnections(companyId);
+      res.json({ connections: all.map(toAgentConnectionView) });
+      return;
+    }
+    assertBoard(req);
     assertCompanyAccess(req, companyId);
     const connections = await svc.listConnections(companyId, req.actor.userId);
     const canManageConnections = await isToolConnectionManagerQuiet(req, companyId);
@@ -2345,10 +2401,27 @@ function connectorEnrollmentPrincipal(req: Request): string {
   });
 
   router.get("/companies/:companyId/tools/profiles/effective/agents/:agentId", async (req, res) => {
-    assertBoard(req);
     const companyId = req.params.companyId as string;
+    const agentId = req.params.agentId as string;
+    if (req.actor.type === "agent") {
+      assertCompanyAccess(req, companyId);
+      if (req.actor.agentId !== agentId) await assertAgentCanReadToolConfig(req, companyId);
+      const effective = await svc.getEffectiveProfilesForAgent(companyId, agentId);
+      res.json({ ...effective, installedConnections: effective.installedConnections.map(toAgentConnectionView) });
+      return;
+    }
+    assertBoard(req);
     assertCompanyAccess(req, companyId);
-    res.json(await svc.getEffectiveProfilesForAgent(companyId, req.params.agentId as string));
+    res.json(await svc.getEffectiveProfilesForAgent(companyId, agentId));
+  });
+
+  router.get("/agents/me/tools/effective", async (req, res) => {
+    if (req.actor.type !== "agent" || !req.actor.agentId || !req.actor.companyId) {
+      res.status(401).json({ error: "Agent authentication required" });
+      return;
+    }
+    const effective = await svc.getEffectiveProfilesForAgent(req.actor.companyId, req.actor.agentId);
+    res.json({ ...effective, installedConnections: effective.installedConnections.map(toAgentConnectionView) });
   });
 
   router.patch("/tool-profiles/:profileId", validate(updateToolProfileWithEntriesSchema), async (req, res) => {
