@@ -454,6 +454,43 @@ describeEmbeddedPostgres("tool access policy service", () => {
     });
   });
 
+  it("does not let a blanket tools:use grant bypass an effective profile that omits the tool", async () => {
+    const company = await createCompany(db);
+    const agent = await createAgent(db, company.id);
+    const { connection, catalogEntry } = await createTool(db, company.id);
+    await db.insert(principalPermissionGrants).values({
+      companyId: company.id,
+      principalType: "agent",
+      principalId: agent.id,
+      permissionKey: "tools:use",
+      scope: null,
+    });
+    const input = sendEmailDecisionInput(company, agent, connection, catalogEntry);
+    await expect(toolAccessPolicyService(db).decide(input)).resolves.toMatchObject({
+      allowed: true,
+      reasonCode: "allow_explicit_grant",
+    });
+
+    const [profile] = await db.insert(toolProfiles).values({
+      companyId: company.id,
+      profileKey: `deny-profile-${randomUUID()}`,
+      name: "Other tools only",
+      status: "active",
+      defaultAction: "deny",
+    }).returning();
+    await db.insert(toolProfileBindings).values({
+      companyId: company.id,
+      profileId: profile!.id,
+      targetType: "agent",
+      targetId: agent.id,
+    });
+    await expect(toolAccessPolicyService(db).decide(input)).resolves.toMatchObject({
+      allowed: false,
+      decision: "deny",
+      reasonCode: "deny_default",
+    });
+  });
+
   it("denies calls through draft and archived profiles", async () => {
     const company = await createCompany(db);
     const draftAgent = await createAgent(db, company.id);
