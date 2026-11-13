@@ -124,6 +124,7 @@ import {
   companyPrefixFromOnboardingPath,
   resolveRouteOnboardingOptions,
 } from "../lib/onboarding-route";
+import { claimOnboardingOffer } from "../lib/onboarding-auto-open";
 import { useCloudInstance } from "../hooks/useCloudInstance";
 import { PillGuy } from "./onboarding/PillGuy";
 import { SleepingZs } from "./onboarding/SleepingZs";
@@ -1868,6 +1869,7 @@ function OnboardingWizardInner({
   function handleSkipConnect() {
     if (!createdCompanyId || loading) return;
     const prefix = createdCompanyPrefix;
+    claimOnboardingOffer(createdCompanyId);
     setSelectedCompanyId(createdCompanyId, { source: "route_sync" });
     reset();
     closeOnboarding();
