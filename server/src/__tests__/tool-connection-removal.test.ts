@@ -270,7 +270,6 @@ describeEmbeddedPostgres("tool connection removal", () => {
       secretsRetainedShared: 0,
       appProfile: "deleted",
       installsRemoved: 1,
-      applicationArchived: true,
     });
     expect(removed.removal.credentialRefsCleared).toBeGreaterThan(0);
     expect(removed.removal.secretBindingsRemoved).toBeGreaterThan(0);
@@ -660,7 +659,6 @@ describeEmbeddedPostgres("tool connection removal", () => {
       transport: "mcp_remote",
       appProfile: "deleted",
       secretsRetainedShared: 0,
-      applicationArchived: true,
     });
     expect(Number((receipt!.details as Record<string, unknown>).secretsRevoked)).toBeGreaterThan(0);
     const receiptText = JSON.stringify(receipt!.details);
