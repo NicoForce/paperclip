@@ -549,7 +549,7 @@ export function Browse({ renderAccountDetails = (connection) => connection.conne
       applicationsQuery.data?.applications ?? []
     ).filter(
       (application) =>
-        application.status !== "archived" &&
+        (application.status !== "archived" || activeConnections.some((connection) => connection.applicationId === application.id)) &&
         application.type !== "chat" &&
         application.metadata?.purpose !== "channel",
     );
