@@ -2915,6 +2915,7 @@ export function createToolGatewayService(
             agentId: session.agentId,
             responsibleUserId: session.responsibleUserId,
             allowStandingDelegation: false,
+            allowOrganizationGrants: true,
           },
         );
         if (!selected.grant)
@@ -2974,6 +2975,7 @@ export function createToolGatewayService(
                 agentId: session.agentId,
                 responsibleUserId: session.responsibleUserId,
                 allowStandingDelegation: false,
+                allowOrganizationGrants: true,
                 excludeGrantId: original.id,
               },
             );
