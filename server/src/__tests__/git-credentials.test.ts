@@ -11,6 +11,7 @@ import {
   createGitRemoteAuthProvider,
   describeGitAuthFailure,
   isGitHubHttpsRemoteUrl,
+  resolveTokenGitHubIdentity,
   scrubGitCredentialText,
 } from "../services/git-credentials.ts";
 
@@ -377,5 +378,33 @@ describe("DEFAULT_GITHUB_TOKEN_SECRET_NAMES", () => {
       "GH_TOKEN",
       "PAPERCLIP_GITHUB_TOKEN",
     ]);
+  });
+});
+
+describe("resolveTokenGitHubIdentity", () => {
+  const ok = (body: unknown) => vi.fn(async () => new Response(JSON.stringify(body), { status: 200 }));
+
+  it("derives id and login from GET /user", async () => {
+    const fetchImpl = ok({ id: 42, login: "octo-cat" });
+    await expect(resolveTokenGitHubIdentity("pat-ok", fetchImpl as unknown as typeof fetch))
+      .resolves.toEqual({ userId: "42", login: "octo-cat" });
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+
+  it("caches per token", async () => {
+    const fetchImpl = ok({ id: 7, login: "cached" });
+    await resolveTokenGitHubIdentity("pat-cache", fetchImpl as unknown as typeof fetch);
+    await resolveTokenGitHubIdentity("pat-cache", fetchImpl as unknown as typeof fetch);
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+
+  it("returns null on API failure", async () => {
+    const fetchImpl = vi.fn(async () => new Response("{}", { status: 401 }));
+    await expect(resolveTokenGitHubIdentity("pat-bad", fetchImpl as unknown as typeof fetch)).resolves.toBeNull();
+  });
+
+  it("rejects unsafe logins", async () => {
+    const fetchImpl = ok({ id: 9, login: "bad login\n--x" });
+    await expect(resolveTokenGitHubIdentity("pat-unsafe", fetchImpl as unknown as typeof fetch)).resolves.toBeNull();
   });
 });
