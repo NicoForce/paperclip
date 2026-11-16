@@ -21,4 +21,10 @@ INCLUDE_COPILOT=false
 INCLUDE_CURSOR_SDK=false
 INCLUDE_EMBEDDED_POSTGRES=false
 INCLUDE_COPILOT_ASSETS=false
+INCLUDE_GLOBAL_OPENCODE_BASELINE=false
+INCLUDE_DOCS_AND_MAPS=false
+INCLUDE_SOURCES=false
+INCLUDE_RUNNER_DIST=false
+# Optional, unverified (each only if feature unused): drizzle-kit + its esbuild 0.18, vite/rolldown/lightningcss natives, Teams chat adapter
+# PRUNE_PACKAGES='drizzle-kit@* esbuild@0.18.* @esbuild+linux-x64@0.18.* @rolldown+binding-* lightningcss-* @microsoft+teams.graph-endpoints@*'
 PRUNE_PACKAGES=
