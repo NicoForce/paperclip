@@ -232,7 +232,7 @@ ARG USER_GID=1000
 ARG CLI_TOOLS_CACHE_EPOCH=""
 ARG INSTALL_CODEX_CLI=true
 ARG INSTALL_OPENCODE_CLI=true
-ARG OPENCODE_VERSION=1.18.34
+ARG OPENCODE_VERSION=latest
 WORKDIR /app
 # Tool and OS layer BEFORE the app copy: it references nothing from /app, and
 # the app copy changes on every commit — ordered the other way around, this
@@ -294,7 +294,6 @@ ENV NODE_ENV=production \
   PAPERCLIP_CONFIG=/paperclip/instances/default/config.json \
   PAPERCLIP_DEPLOYMENT_MODE=authenticated \
   PAPERCLIP_DEPLOYMENT_EXPOSURE=private \
-  PAPERCLIP_OPENCODE_COMMAND=/usr/local/lib/node_modules/opencode-ai/node_modules/opencode-linux-x64/bin/opencode \
   OPENCODE_ALLOW_ALL_MODELS=true \
   GEMINI_SANDBOX=false
 
