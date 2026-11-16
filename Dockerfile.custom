@@ -250,7 +250,7 @@ ARG INSTALL_AZURE_CLI=true
 ARG TERRAFORM_MINOR=1.11
 ARG KUBECTL_MINOR=1.37
 ENV DEVTOOLS=/opt/devtools
-ENV HELM_PLUGINS=/opt/devtools/helm/plugins
+ENV HELM_DATA_HOME=/opt/devtools/helm
 ENV PATH=/opt/devtools/bin:${PATH}
 RUN mkdir -p /opt/devtools/bin /opt/devtools/helm/plugins \
   && apt-get update \
@@ -287,8 +287,7 @@ RUN echo "epoch: ${CLI_TOOLS_CACHE_EPOCH}" && [ "${INSTALL_DEVTOOLS}" = "true" ]
     helm plugin install "https://github.com/jkroepke/helm-secrets/releases/download/${sv}/${n}-${sv#v}.tgz" --verify=false; \
   done; \
   helm plugin list; \
-  ls -la "$(helm env HELM_PLUGINS)"; \
-  [ "$(ls -d "$(helm env HELM_PLUGINS)"/secrets* | wc -l)" = "3" ]; \
+  [ "$(helm plugin list | grep -c -E '^(secrets|secrets-getter|secrets-post-renderer)[[:space:]]')" = "3" ]; \
   rm -rf /tmp/* /root/.cache /root/.config; chmod -R a+rX /opt/devtools
 RUN echo "epoch: ${CLI_TOOLS_CACHE_EPOCH}" && [ "${INSTALL_DEVTOOLS}" = "true" ] || exit 0; set -eux; \
   case "$(dpkg --print-architecture)" in amd64) a=x86_64;; arm64) a=aarch64;; esac; \
@@ -343,7 +342,7 @@ RUN apt-get update \
   && chown node:node /paperclip
 
 COPY --from=devtools /opt/devtools /opt/devtools
-ENV HELM_PLUGINS=/opt/devtools/helm/plugins
+ENV HELM_DATA_HOME=/opt/devtools/helm
 ENV PATH=/opt/devtools/bin:${PATH}
 
 COPY scripts/docker-entrypoint.sh /usr/local/bin/
