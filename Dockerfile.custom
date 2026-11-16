@@ -12,7 +12,7 @@ RUN usermod -u $USER_UID --non-unique node \
   && groupmod -g $USER_GID --non-unique node \
   && usermod -g $USER_GID -d /paperclip node
 
-FROM base AS deps
+FROM base AS manifests
 WORKDIR /app
 COPY package.json pnpm-workspace.yaml pnpm-lock.yaml .npmrc ./
 COPY cli/package.json cli/
@@ -54,7 +54,26 @@ COPY server/src/services/copilot-connection-probe.ts server/src/services/
 
 # CI owns repository lock updates. Resolve manifest changes in the image's
 # private build tree, then install from that exact generated lock.
-RUN pnpm install --resolution-only --ignore-scripts --no-frozen-lockfile && pnpm install --frozen-lockfile
+FROM manifests AS deps
+RUN --mount=type=cache,id=paperclip-pnpm-store,target=/pnpm-store \
+  pnpm install --resolution-only --ignore-scripts --no-frozen-lockfile --store-dir /pnpm-store \
+  && pnpm install --frozen-lockfile --store-dir /pnpm-store
+
+# Runtime-only dependency tree. The server bundle (dist-runtime) keeps
+# third-party packages external and records absolute /app/node_modules/.pnpm/*
+# paths, so this tree must be installed at the same /app location from the same
+# resolved lockfile as `deps`. devDependencies, unrelated workspaces (ui, cli)
+# and musl native binaries (the image is glibc-only) are left out.
+FROM manifests AS prod-deps
+COPY --from=deps /app/pnpm-lock.yaml ./pnpm-lock.yaml
+RUN --mount=type=cache,id=paperclip-pnpm-store,target=/pnpm-store \
+  NODE_ENV=production pnpm install --frozen-lockfile --prod --store-dir /pnpm-store \
+    --filter "@paperclipai/server..." \
+    --filter "@paperclipai/paperclip-runner" \
+    --filter "./packages/plugins/*" \
+    --filter "@paperclipai/mcp-server" \
+  && rm -rf /app/node_modules/.pnpm/*musl* \
+  && find /app/node_modules/.pnpm -maxdepth 4 -xtype l -delete
 
 FROM base AS rust-toolchain
 WORKDIR /app
@@ -95,8 +114,11 @@ RUN cd /tmp/runner-toolchain && rustup show
 
 # Pin the recipe generator and its dependency lockfile. It is a build-only tool
 # and uses the same package-owned compiler as both native build stages.
+FROM docker.io/lukemathwalker/cargo-chef:0.1.73-rust-1.93.1-trixie AS cargo-chef-bin
+
 FROM rust-toolchain AS rust-chef
-RUN cd /tmp/runner-toolchain && cargo install cargo-chef --version 0.1.73 --locked
+COPY --from=cargo-chef-bin /usr/local/cargo/bin/cargo-chef /usr/local/cargo/bin/cargo-chef
+RUN cargo-chef --version | grep -q '0.1.73'
 
 FROM rust-chef AS runner-plan
 WORKDIR /app/packages/paperclip-runner
@@ -151,6 +173,58 @@ RUN pnpm --filter @paperclipai/server build:runtime \
   && test -f server/dist-runtime/index.mjs || (echo "ERROR: server runtime bundle missing" && exit 1)
 RUN rm -rf packages/paperclip-runner/runner/target
 
+# Shippable app tree: built output and sources from `build`, with the full
+# dev node_modules replaced by the runtime-only tree from `prod-deps`.
+FROM build AS app
+# Per-tool opt-outs for the shipped /app/node_modules tree. Each flag removes
+# that tool's native binaries only; set to "false" for tools you do not run.
+ARG INCLUDE_CODEX=true
+ARG INCLUDE_OPENCODE=true
+ARG INCLUDE_OPENCODE_BASELINE=true
+ARG INCLUDE_CLAUDE_SDK=true
+ARG INCLUDE_COPILOT=true
+ARG INCLUDE_CURSOR_SDK=true
+ARG INCLUDE_EMBEDDED_POSTGRES=true
+ARG INCLUDE_COPILOT_ASSETS=true
+# Non-runtime files: docs, tests, sourcemaps, type declarations. Safe to drop.
+ARG INCLUDE_DOCS_AND_MAPS=true
+# TypeScript sources (server/ui/db/runner src). The server runs from
+# dist-runtime; unverified for every code path, boot-test before relying on it.
+ARG INCLUDE_SOURCES=true
+# packages/paperclip-runner/dist (66M); a vendored copy also ships in server/dist/vendor.
+ARG INCLUDE_RUNNER_DIST=true
+# Extra space-separated node_modules/.pnpm entry globs to remove.
+ARG PRUNE_PACKAGES=""
+RUN find /app -name node_modules -type d -prune -exec rm -rf {} +
+COPY --from=prod-deps /app /app
+RUN set -e; \
+  P=/app/node_modules/.pnpm; globs="${PRUNE_PACKAGES}"; \
+  [ "${INCLUDE_CODEX}" = "true" ] || globs="${globs} @openai+codex@*"; \
+  [ "${INCLUDE_OPENCODE}" = "true" ] || globs="${globs} opencode-*"; \
+  [ "${INCLUDE_OPENCODE_BASELINE}" = "true" ] || globs="${globs} opencode-linux-x64-baseline@*"; \
+  [ "${INCLUDE_CLAUDE_SDK}" = "true" ] || globs="${globs} @anthropic-ai+claude-agent-sdk-linux-*"; \
+  [ "${INCLUDE_COPILOT}" = "true" ] || globs="${globs} @github+copilot-linux-*"; \
+  [ "${INCLUDE_CURSOR_SDK}" = "true" ] || globs="${globs} @cursor+sdk-linux-*"; \
+  [ "${INCLUDE_EMBEDDED_POSTGRES}" = "true" ] || globs="${globs} @embedded-postgres+linux-*"; \
+  for g in ${globs}; do rm -rf ${P}/${g}; done; \
+  if [ -n "${globs# }" ]; then find /app/node_modules -xtype l -delete; fi; \
+  if [ "${INCLUDE_COPILOT_ASSETS}" != "true" ]; then \
+    rm -rf /app/packages/paperclip-runner/provider-assets /app/server/provider-assets; \
+  fi
+RUN set -e; \
+  if [ "${INCLUDE_DOCS_AND_MAPS}" != "true" ]; then \
+    cd /app && rm -rf docs doc tests evals screenshots report releases maps ui/storybook server/test-baselines \
+      packages/paperclip-runner/docs packages/paperclip-runner/test packages/paperclip-runner/test-fixtures packages/paperclip-runner/test-support packages/paperclip-runner/devtools packages/paperclip-runner/examples; \
+    find /app -name node_modules -prune -o -type f \( -name '*.map' -o -name '*.d.ts' -o -name '*.d.mts' -o -name '*.d.cts' \) -print0 | xargs -0 -r rm -f; \
+  fi; \
+  if [ "${INCLUDE_SOURCES}" != "true" ]; then \
+    cd /app && rm -rf server/src ui/src packages/paperclip-runner/src; \
+    find packages/db/src -mindepth 1 -maxdepth 1 ! -name migrations -exec rm -rf {} +; \
+  fi; \
+  if [ "${INCLUDE_RUNNER_DIST}" != "true" ]; then \
+    rm -rf /app/packages/paperclip-runner/dist; \
+  fi
+
 # Remote OpenCode and ACPX runs require a controller-owned provider pack to
 # verify the sandbox installation or stage matching assets. Ship it in the
 # standard image so downstream Cloud compositions inherit the same artifacts.
@@ -169,6 +243,65 @@ RUN mkdir -p /provider-pack /provider-pack-transport \
     echo "Skipping remote provider pack: supply a full PAPERCLIP_BUILD_COMMIT to enable remote OpenCode/ACPX execution"; \
   fi
 
+FROM base AS devtools
+ARG CLI_TOOLS_CACHE_EPOCH=""
+ARG INSTALL_DEVTOOLS=true
+ARG INSTALL_AZURE_CLI=true
+ARG TERRAFORM_MINOR=1.11
+ARG KUBECTL_MINOR=1.37
+ENV DEVTOOLS=/opt/devtools
+ENV HELM_DATA_HOME=/opt/devtools/helm
+ENV PATH=/opt/devtools/bin:${PATH}
+RUN mkdir -p /opt/devtools/bin /opt/devtools/helm/plugins \
+  && apt-get update \
+  && apt-get install -y --no-install-recommends unzip jq python3-venv \
+  && rm -rf /var/lib/apt/lists/*
+RUN echo "epoch: ${CLI_TOOLS_CACHE_EPOCH}" && [ "${INSTALL_DEVTOOLS}" = "true" ] || exit 0; set -eux; \
+  arch="$(dpkg --print-architecture)"; \
+  gh_latest() { curl -fsSLI -o /dev/null -w '%{url_effective}' "https://github.com/$1/releases/latest" | sed 's#.*/tag/##'; }; \
+  v="$(gh_latest getsops/sops)"; \
+  curl -fsSL -o /opt/devtools/bin/sops "https://github.com/getsops/sops/releases/download/${v}/sops-${v}.linux.${arch}"; \
+  curl -fsSL -o /opt/devtools/bin/terragrunt "https://github.com/gruntwork-io/terragrunt/releases/latest/download/terragrunt_linux_${arch}"; \
+  curl -fsSL -o /opt/devtools/bin/yq "https://github.com/mikefarah/yq/releases/latest/download/yq_linux_${arch}"; \
+  chmod 755 /opt/devtools/bin/*
+RUN echo "epoch: ${CLI_TOOLS_CACHE_EPOCH}" && [ "${INSTALL_DEVTOOLS}" = "true" ] || exit 0; set -eux; \
+  arch="$(dpkg --print-architecture)"; \
+  tv="$(curl -fsSL https://releases.hashicorp.com/terraform/index.json | jq -r '.versions|keys[]' | grep -E "^${TERRAFORM_MINOR}\.[0-9]+$" | sort -V | tail -n 1)"; \
+  curl -fsSL -o /tmp/tf.zip "https://releases.hashicorp.com/terraform/${tv}/terraform_${tv}_linux_${arch}.zip"; \
+  unzip -q /tmp/tf.zip terraform -d /opt/devtools/bin; \
+  kv="$(curl -fsSL "https://dl.k8s.io/release/stable-${KUBECTL_MINOR}.txt")"; \
+  curl -fsSL -o /opt/devtools/bin/kubectl "https://dl.k8s.io/release/${kv}/bin/linux/${arch}/kubectl"; \
+  echo "$(curl -fsSL "https://dl.k8s.io/release/${kv}/bin/linux/${arch}/kubectl.sha256")  /opt/devtools/bin/kubectl" | sha256sum -c -; \
+  chmod 755 /opt/devtools/bin/*; rm -f /tmp/tf.zip
+RUN echo "epoch: ${CLI_TOOLS_CACHE_EPOCH}" && [ "${INSTALL_DEVTOOLS}" = "true" ] || exit 0; set -eux; \
+  arch="$(dpkg --print-architecture)"; \
+  gh_latest() { curl -fsSLI -o /dev/null -w '%{url_effective}' "https://github.com/$1/releases/latest" | sed 's#.*/tag/##'; }; \
+  hv="$(curl -fsSL https://get.helm.sh/helm-latest-version)"; \
+  curl -fsSL "https://get.helm.sh/helm-${hv}-linux-${arch}.tar.gz" | tar -xz -C /tmp; \
+  mv "/tmp/linux-${arch}/helm" /opt/devtools/bin/helm; \
+  fv="$(gh_latest helmfile/helmfile)"; \
+  curl -fsSL "https://github.com/helmfile/helmfile/releases/download/${fv}/helmfile_${fv#v}_linux_${arch}.tar.gz" | tar -xz -C /opt/devtools/bin helmfile; \
+  sv="$(gh_latest jkroepke/helm-secrets)"; \
+  helm plugin install https://github.com/databus23/helm-diff --verify=false; \
+  for n in secrets secrets-getter secrets-post-renderer; do \
+    helm plugin install "https://github.com/jkroepke/helm-secrets/releases/download/${sv}/${n}-${sv#v}.tgz" --verify=false; \
+  done; \
+  helm plugin list; \
+  [ "$(helm plugin list | grep -c -E '^(secrets|secrets-getter|secrets-post-renderer)[[:space:]]')" = "3" ]; \
+  rm -rf /tmp/* /root/.cache /root/.config; chmod -R a+rX /opt/devtools
+RUN echo "epoch: ${CLI_TOOLS_CACHE_EPOCH}" && [ "${INSTALL_DEVTOOLS}" = "true" ] || exit 0; set -eux; \
+  case "$(dpkg --print-architecture)" in amd64) a=x86_64;; arm64) a=aarch64;; esac; \
+  curl -fsSL -o /tmp/aws.zip "https://awscli.amazonaws.com/awscli-exe-linux-${a}.zip"; \
+  unzip -q /tmp/aws.zip -d /tmp; \
+  /tmp/aws/install -i /opt/devtools/aws-cli -b /opt/devtools/bin; \
+  rm -rf /tmp/aws /tmp/aws.zip /opt/devtools/aws-cli/v2/current/dist/aws_completer /opt/devtools/aws-cli/v2/current/dist/awscli/examples
+RUN echo "epoch: ${CLI_TOOLS_CACHE_EPOCH}" && [ "${INSTALL_DEVTOOLS}" = "true" ] && [ "${INSTALL_AZURE_CLI}" = "true" ] || exit 0; set -eux; \
+  python3 -m venv /opt/devtools/az \
+  && /opt/devtools/az/bin/pip install --no-cache-dir azure-cli \
+  && ln -s /opt/devtools/az/bin/az /opt/devtools/bin/az \
+  && find /opt/devtools/az -name '__pycache__' -prune -exec rm -rf {} +; \
+  chmod -R a+rX /opt/devtools
+
 FROM base AS production
 ARG USER_UID=1000
 ARG USER_GID=1000
@@ -176,25 +309,46 @@ ARG USER_GID=1000
 # the @latest CLI tools advance weekly). Without it the cached layer would
 # freeze the tools until an unrelated cache bust.
 ARG CLI_TOOLS_CACHE_EPOCH=""
+ARG INSTALL_CODEX_CLI=true
+ARG INSTALL_OPENCODE_CLI=true
+ARG OPENCODE_VERSION=latest
+# opencode-ai ships linux-x64 and a -baseline (no-AVX2) binary, ~205M each.
+# Drop the baseline on any CPU with AVX2; set true only if opencode crashes with SIGILL.
+ARG INCLUDE_GLOBAL_OPENCODE_BASELINE=true
 WORKDIR /app
 # Tool and OS layer BEFORE the app copy: it references nothing from /app, and
 # the app copy changes on every commit — ordered the other way around, this
 # (the single most expensive layer: four CLI toolchains + apt, per arch) can
 # never hit the layer cache and rebuilds on every build.
 RUN echo "cli-tools-epoch: ${CLI_TOOLS_CACHE_EPOCH}" \
-  && npm install --global --omit=dev @openai/codex@latest opencode-ai \
-  && npm cache clean --force \
-  && rm -rf /root/.npm /root/.cache \
-  && apt-get update \
-  && apt-get install -y --no-install-recommends openssh-client jq \
+  && if [ "${INSTALL_CODEX_CLI}" = "true" ]; then \
+    npm install --global --omit=dev @openai/codex@latest \
+    && npm cache clean --force \
+    && rm -rf /root/.npm /root/.cache; \
+  fi
+RUN echo "cli-tools-epoch: ${CLI_TOOLS_CACHE_EPOCH}" \
+  && if [ "${INSTALL_OPENCODE_CLI}" = "true" ]; then \
+    npm install --global --omit=dev opencode-ai@${OPENCODE_VERSION} \
+    && if [ "${INCLUDE_GLOBAL_OPENCODE_BASELINE}" != "true" ]; then \
+      rm -rf "$(npm root -g)"/opencode-ai/node_modules/opencode-linux-*-baseline "$(npm root -g)"/opencode-ai/node_modules/opencode-linux-*-musl; \
+    fi \
+    && npm cache clean --force \
+    && rm -rf /root/.npm /root/.cache; \
+  fi
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends openssh-client jq postgresql-client dnsutils netcat-openbsd iputils-ping traceroute procps less openssl \
   && rm -rf /var/lib/apt/lists/* \
   && mkdir -p /paperclip \
   && chown node:node /paperclip
 
+COPY --from=devtools /opt/devtools /opt/devtools
+ENV HELM_DATA_HOME=/opt/devtools/helm
+ENV PATH=/opt/devtools/bin:${PATH}
+
 COPY scripts/docker-entrypoint.sh /usr/local/bin/
 RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 
-COPY --chown=node:node --from=build /app /app
+COPY --chown=node:node --from=app /app /app
 
 COPY --from=runner-provider-pack /provider-pack /opt/paperclip-runner/provider-pack
 COPY --from=runner-provider-pack /provider-pack-transport/ /opt/paperclip-runner/

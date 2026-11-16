@@ -97,6 +97,17 @@ export function resolvePinnedOpenCodeCommand(
   issuer: string | URL = import.meta.url,
   target: { platform?: string; architecture?: string } = {},
 ): string {
+  const override = process.env.PAPERCLIP_OPENCODE_COMMAND?.trim();
+  if (override) {
+    try {
+      const executable = realpathSync(override);
+      if (statSync(executable).isFile()) {
+        accessSync(executable, constants.X_OK);
+        return executable;
+      }
+    } catch {
+    }
+  }
   try {
     const platform = target.platform ?? process.platform;
     const architecture = target.architecture ?? process.arch;

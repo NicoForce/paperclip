@@ -1,0 +1,36 @@
+# cp Dockerfile.custom.args.example Dockerfile.custom.args
+# podman build -f Dockerfile.custom --target production --build-arg-file Dockerfile.custom.args -t paperclip:custom .
+#
+# Paperclip runner (INCLUDE_PROVIDER_PACK / remote runner) needs, per provider:
+#   opencode: INCLUDE_OPENCODE=false + INCLUDE_OPENCODE_BASELINE=true (runner resolves opencode-linux-x64-baseline from node_modules, no PATH fallback)
+#   codex:    INCLUDE_CODEX=true
+#   claude:   INCLUDE_CLAUDE_SDK=true
+#   copilot:  INCLUDE_COPILOT=true + INCLUDE_COPILOT_ASSETS=true
+#   cursor:   INCLUDE_CURSOR_SDK=true
+# Legacy local adapters use global CLIs from PATH: INSTALL_CODEX_CLI / INSTALL_OPENCODE_CLI.
+# INCLUDE_EMBEDDED_POSTGRES=false requires external DATABASE_URL at runtime (not build time).
+INSTALL_CODEX_CLI=false
+INSTALL_OPENCODE_CLI=true
+# latest = track newest at build time; pin (e.g. 1.19.5) for reproducible builds
+OPENCODE_VERSION=latest
+INCLUDE_CODEX=false
+INCLUDE_OPENCODE=false
+INCLUDE_OPENCODE_BASELINE=false
+INCLUDE_CLAUDE_SDK=false
+INCLUDE_COPILOT=false
+INCLUDE_CURSOR_SDK=false
+INCLUDE_EMBEDDED_POSTGRES=false
+INCLUDE_COPILOT_ASSETS=false
+INCLUDE_GLOBAL_OPENCODE_BASELINE=false
+INCLUDE_DOCS_AND_MAPS=false
+INCLUDE_SOURCES=false
+INCLUDE_RUNNER_DIST=false
+# Unused here: drizzle-kit (optional peer of better-auth) + esbuild 0.18, vite/rolldown/lightningcss natives. Keep teams (imported by chat-sdk-runtime). Unverified boot: clear if server fails.
+PRUNE_PACKAGES='drizzle-kit@* esbuild@0.18.* @esbuild+linux-x64@0.18.* @rolldown+binding-* lightningcss-*'
+# Day-to-day debug tools (stage devtools, cached before app copy): sops terragrunt yq helm helmfile helm-diff helm-secrets (latest), terraform TERRAFORM_MINOR, kubectl KUBECTL_MINOR, aws cli v2, az cli.
+INSTALL_DEVTOOLS=true
+INSTALL_AZURE_CLI=true
+TERRAFORM_MINOR=1.11
+KUBECTL_MINOR=1.37
+# Bump to force refresh of latest-tracking tools (devtools, global CLIs). Change value, rebuild.
+CLI_TOOLS_CACHE_EPOCH=1
