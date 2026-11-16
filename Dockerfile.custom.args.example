@@ -27,3 +27,8 @@ INCLUDE_SOURCES=false
 INCLUDE_RUNNER_DIST=false
 # Unused here: drizzle-kit (optional peer of better-auth) + esbuild 0.18, vite/rolldown/lightningcss natives. Keep teams (imported by chat-sdk-runtime). Unverified boot: clear if server fails.
 PRUNE_PACKAGES='drizzle-kit@* esbuild@0.18.* @esbuild+linux-x64@0.18.* @rolldown+binding-* lightningcss-*'
+# Day-to-day debug tools (stage devtools, cached before app copy): sops terragrunt yq helm helmfile helm-diff helm-secrets (latest), terraform TERRAFORM_MINOR, kubectl KUBECTL_MINOR, aws cli v2, az cli.
+INSTALL_DEVTOOLS=true
+INSTALL_AZURE_CLI=true
+TERRAFORM_MINOR=1.11
+KUBECTL_MINOR=1.37

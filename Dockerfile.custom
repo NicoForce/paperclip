@@ -243,6 +243,62 @@ RUN mkdir -p /provider-pack /provider-pack-transport \
     echo "Skipping remote provider pack: supply a full PAPERCLIP_BUILD_COMMIT to enable remote OpenCode/ACPX execution"; \
   fi
 
+FROM base AS devtools
+ARG CLI_TOOLS_CACHE_EPOCH=""
+ARG INSTALL_DEVTOOLS=true
+ARG INSTALL_AZURE_CLI=true
+ARG TERRAFORM_MINOR=1.11
+ARG KUBECTL_MINOR=1.37
+ENV DEVTOOLS=/opt/devtools
+ENV HELM_PLUGINS=/opt/devtools/helm/plugins
+ENV PATH=/opt/devtools/bin:${PATH}
+RUN mkdir -p /opt/devtools/bin /opt/devtools/helm/plugins \
+  && apt-get update \
+  && apt-get install -y --no-install-recommends unzip jq python3-venv \
+  && rm -rf /var/lib/apt/lists/*
+RUN echo "epoch: ${CLI_TOOLS_CACHE_EPOCH}" && [ "${INSTALL_DEVTOOLS}" = "true" ] || exit 0; set -eux; \
+  arch="$(dpkg --print-architecture)"; \
+  gh_latest() { curl -fsSLI -o /dev/null -w '%{url_effective}' "https://github.com/$1/releases/latest" | sed 's#.*/tag/##'; }; \
+  v="$(gh_latest getsops/sops)"; \
+  curl -fsSL -o /opt/devtools/bin/sops "https://github.com/getsops/sops/releases/download/${v}/sops-${v}.linux.${arch}"; \
+  curl -fsSL -o /opt/devtools/bin/terragrunt "https://github.com/gruntwork-io/terragrunt/releases/latest/download/terragrunt_linux_${arch}"; \
+  curl -fsSL -o /opt/devtools/bin/yq "https://github.com/mikefarah/yq/releases/latest/download/yq_linux_${arch}"; \
+  chmod 755 /opt/devtools/bin/*
+RUN echo "epoch: ${CLI_TOOLS_CACHE_EPOCH}" && [ "${INSTALL_DEVTOOLS}" = "true" ] || exit 0; set -eux; \
+  arch="$(dpkg --print-architecture)"; \
+  tv="$(curl -fsSL https://releases.hashicorp.com/terraform/index.json | jq -r '.versions|keys[]' | grep -E "^${TERRAFORM_MINOR}\.[0-9]+$" | sort -V | tail -n 1)"; \
+  curl -fsSL -o /tmp/tf.zip "https://releases.hashicorp.com/terraform/${tv}/terraform_${tv}_linux_${arch}.zip"; \
+  unzip -q /tmp/tf.zip terraform -d /opt/devtools/bin; \
+  kv="$(curl -fsSL "https://dl.k8s.io/release/stable-${KUBECTL_MINOR}.txt")"; \
+  curl -fsSL -o /opt/devtools/bin/kubectl "https://dl.k8s.io/release/${kv}/bin/linux/${arch}/kubectl"; \
+  echo "$(curl -fsSL "https://dl.k8s.io/release/${kv}/bin/linux/${arch}/kubectl.sha256")  /opt/devtools/bin/kubectl" | sha256sum -c -; \
+  chmod 755 /opt/devtools/bin/*; rm -f /tmp/tf.zip
+RUN echo "epoch: ${CLI_TOOLS_CACHE_EPOCH}" && [ "${INSTALL_DEVTOOLS}" = "true" ] || exit 0; set -eux; \
+  arch="$(dpkg --print-architecture)"; \
+  gh_latest() { curl -fsSLI -o /dev/null -w '%{url_effective}' "https://github.com/$1/releases/latest" | sed 's#.*/tag/##'; }; \
+  hv="$(curl -fsSL https://get.helm.sh/helm-latest-version)"; \
+  curl -fsSL "https://get.helm.sh/helm-${hv}-linux-${arch}.tar.gz" | tar -xz -C /tmp; \
+  mv "/tmp/linux-${arch}/helm" /opt/devtools/bin/helm; \
+  fv="$(gh_latest helmfile/helmfile)"; \
+  curl -fsSL "https://github.com/helmfile/helmfile/releases/download/${fv}/helmfile_${fv#v}_linux_${arch}.tar.gz" | tar -xz -C /opt/devtools/bin helmfile; \
+  sv="$(gh_latest jkroepke/helm-secrets)"; \
+  helm plugin install https://github.com/databus23/helm-diff --verify=false; \
+  helm plugin install "https://github.com/jkroepke/helm-secrets/releases/download/${sv}/secrets-${sv#v}.tgz" --verify=false; \
+  helm plugin list; \
+  rm -rf /tmp/* /root/.cache /root/.config; chmod -R a+rX /opt/devtools
+RUN echo "epoch: ${CLI_TOOLS_CACHE_EPOCH}" && [ "${INSTALL_DEVTOOLS}" = "true" ] || exit 0; set -eux; \
+  case "$(dpkg --print-architecture)" in amd64) a=x86_64;; arm64) a=aarch64;; esac; \
+  curl -fsSL -o /tmp/aws.zip "https://awscli.amazonaws.com/awscli-exe-linux-${a}.zip"; \
+  unzip -q /tmp/aws.zip -d /tmp; \
+  /tmp/aws/install -i /opt/devtools/aws-cli -b /opt/devtools/bin; \
+  rm -rf /tmp/aws /tmp/aws.zip /opt/devtools/aws-cli/v2/current/dist/aws_completer /opt/devtools/aws-cli/v2/current/dist/awscli/examples
+RUN echo "epoch: ${CLI_TOOLS_CACHE_EPOCH}" && [ "${INSTALL_DEVTOOLS}" = "true" ] && [ "${INSTALL_AZURE_CLI}" = "true" ] || exit 0; set -eux; \
+  python3 -m venv /opt/devtools/az \
+  && /opt/devtools/az/bin/pip install --no-cache-dir azure-cli \
+  && ln -s /opt/devtools/az/bin/az /opt/devtools/bin/az \
+  && find /opt/devtools/az -name '__pycache__' -prune -exec rm -rf {} +; \
+  chmod -R a+rX /opt/devtools
+
 FROM base AS production
 ARG USER_UID=1000
 ARG USER_GID=1000
@@ -277,10 +333,14 @@ RUN echo "cli-tools-epoch: ${CLI_TOOLS_CACHE_EPOCH}" \
     && rm -rf /root/.npm /root/.cache; \
   fi
 RUN apt-get update \
-  && apt-get install -y --no-install-recommends openssh-client jq \
+  && apt-get install -y --no-install-recommends openssh-client jq postgresql-client dnsutils netcat-openbsd iputils-ping traceroute procps less openssl \
   && rm -rf /var/lib/apt/lists/* \
   && mkdir -p /paperclip \
   && chown node:node /paperclip
+
+COPY --from=devtools /opt/devtools /opt/devtools
+ENV HELM_PLUGINS=/opt/devtools/helm/plugins
+ENV PATH=/opt/devtools/bin:${PATH}
 
 COPY scripts/docker-entrypoint.sh /usr/local/bin/
 RUN chmod +x /usr/local/bin/docker-entrypoint.sh
