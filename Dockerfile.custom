@@ -283,8 +283,11 @@ RUN echo "epoch: ${CLI_TOOLS_CACHE_EPOCH}" && [ "${INSTALL_DEVTOOLS}" = "true" ]
   curl -fsSL "https://github.com/helmfile/helmfile/releases/download/${fv}/helmfile_${fv#v}_linux_${arch}.tar.gz" | tar -xz -C /opt/devtools/bin helmfile; \
   sv="$(gh_latest jkroepke/helm-secrets)"; \
   helm plugin install https://github.com/databus23/helm-diff --verify=false; \
-  helm plugin install "https://github.com/jkroepke/helm-secrets/releases/download/${sv}/secrets-${sv#v}.tgz" --verify=false; \
+  for n in secrets secrets-getter secrets-post-renderer; do \
+    helm plugin install "https://github.com/jkroepke/helm-secrets/releases/download/${sv}/${n}-${sv#v}.tgz" --verify=false; \
+  done; \
   helm plugin list; \
+  [ "$(helm plugin list | grep -c -E '^(secrets|secrets-getter|secrets-post-renderer)[[:space:]]')" = "3" ]; \
   rm -rf /tmp/* /root/.cache /root/.config; chmod -R a+rX /opt/devtools
 RUN echo "epoch: ${CLI_TOOLS_CACHE_EPOCH}" && [ "${INSTALL_DEVTOOLS}" = "true" ] || exit 0; set -eux; \
   case "$(dpkg --print-architecture)" in amd64) a=x86_64;; arm64) a=aarch64;; esac; \
