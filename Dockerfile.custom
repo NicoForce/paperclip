@@ -287,7 +287,8 @@ RUN echo "epoch: ${CLI_TOOLS_CACHE_EPOCH}" && [ "${INSTALL_DEVTOOLS}" = "true" ]
     helm plugin install "https://github.com/jkroepke/helm-secrets/releases/download/${sv}/${n}-${sv#v}.tgz" --verify=false; \
   done; \
   helm plugin list; \
-  [ "$(helm plugin list | grep -c -E '^(secrets|secrets-getter|secrets-post-renderer)[[:space:]]')" = "3" ]; \
+  ls -la "$(helm env HELM_PLUGINS)"; \
+  [ "$(ls -d "$(helm env HELM_PLUGINS)"/secrets* | wc -l)" = "3" ]; \
   rm -rf /tmp/* /root/.cache /root/.config; chmod -R a+rX /opt/devtools
 RUN echo "epoch: ${CLI_TOOLS_CACHE_EPOCH}" && [ "${INSTALL_DEVTOOLS}" = "true" ] || exit 0; set -eux; \
   case "$(dpkg --print-architecture)" in amd64) a=x86_64;; arm64) a=aarch64;; esac; \
