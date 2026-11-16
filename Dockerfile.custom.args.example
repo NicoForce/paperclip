@@ -2,7 +2,7 @@
 # podman build -f Dockerfile.custom --target production --build-arg-file Dockerfile.custom.args -t paperclip:custom .
 #
 # Paperclip runner (INCLUDE_PROVIDER_PACK / remote runner) needs, per provider:
-#   opencode: INCLUDE_OPENCODE=true + INCLUDE_OPENCODE_BASELINE=true (runner resolves opencode-linux-x64-baseline from node_modules, no PATH fallback)
+#   opencode: INCLUDE_OPENCODE=false + INCLUDE_OPENCODE_BASELINE=true (runner resolves opencode-linux-x64-baseline from node_modules, no PATH fallback)
 #   codex:    INCLUDE_CODEX=true
 #   claude:   INCLUDE_CLAUDE_SDK=true
 #   copilot:  INCLUDE_COPILOT=true + INCLUDE_COPILOT_ASSETS=true
@@ -14,7 +14,7 @@ INSTALL_OPENCODE_CLI=true
 # latest = track newest at build time; pin (e.g. 1.19.5) for reproducible builds
 OPENCODE_VERSION=latest
 INCLUDE_CODEX=false
-INCLUDE_OPENCODE=true
+INCLUDE_OPENCODE=false
 INCLUDE_OPENCODE_BASELINE=false
 INCLUDE_CLAUDE_SDK=false
 INCLUDE_COPILOT=false
@@ -25,6 +25,5 @@ INCLUDE_GLOBAL_OPENCODE_BASELINE=false
 INCLUDE_DOCS_AND_MAPS=false
 INCLUDE_SOURCES=false
 INCLUDE_RUNNER_DIST=false
-# Optional, unverified (each only if feature unused): drizzle-kit + its esbuild 0.18, vite/rolldown/lightningcss natives, Teams chat adapter
-# PRUNE_PACKAGES='drizzle-kit@* esbuild@0.18.* @esbuild+linux-x64@0.18.* @rolldown+binding-* lightningcss-* @microsoft+teams.graph-endpoints@*'
-PRUNE_PACKAGES=
+# Unused here: drizzle-kit (optional peer of better-auth) + esbuild 0.18, vite/rolldown/lightningcss natives. Keep teams (imported by chat-sdk-runtime). Unverified boot: clear if server fails.
+PRUNE_PACKAGES='drizzle-kit@* esbuild@0.18.* @esbuild+linux-x64@0.18.* @rolldown+binding-* lightningcss-*'
