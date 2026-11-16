@@ -176,8 +176,19 @@ RUN rm -rf packages/paperclip-runner/runner/target
 # Shippable app tree: built output and sources from `build`, with the full
 # dev node_modules replaced by the runtime-only tree from `prod-deps`.
 FROM build AS app
+ARG PRUNE_PACKAGES=""
+ARG INCLUDE_COPILOT_ASSETS=true
 RUN find /app -name node_modules -type d -prune -exec rm -rf {} +
 COPY --from=prod-deps /app /app
+# Optional size trim. PRUNE_PACKAGES is a space-separated list of
+# node_modules/.pnpm entry globs (e.g. "@openai+codex@* opencode-*") removed
+# from the shipped tree; dangling links are cleaned afterwards.
+RUN set -e; \
+  for g in ${PRUNE_PACKAGES}; do rm -rf /app/node_modules/.pnpm/${g}; done; \
+  if [ -n "${PRUNE_PACKAGES}" ]; then find /app/node_modules -xtype l -delete; fi; \
+  if [ "${INCLUDE_COPILOT_ASSETS}" != "true" ]; then \
+    rm -rf /app/packages/paperclip-runner/provider-assets /app/server/provider-assets; \
+  fi
 
 # Remote OpenCode and ACPX runs require a controller-owned provider pack to
 # verify the sandbox installation or stage matching assets. Ship it in the
@@ -204,15 +215,18 @@ ARG USER_GID=1000
 # the @latest CLI tools advance weekly). Without it the cached layer would
 # freeze the tools until an unrelated cache bust.
 ARG CLI_TOOLS_CACHE_EPOCH=""
+ARG INCLUDE_AI_CLIS=true
 WORKDIR /app
 # Tool and OS layer BEFORE the app copy: it references nothing from /app, and
 # the app copy changes on every commit — ordered the other way around, this
 # (the single most expensive layer: four CLI toolchains + apt, per arch) can
 # never hit the layer cache and rebuilds on every build.
 RUN echo "cli-tools-epoch: ${CLI_TOOLS_CACHE_EPOCH}" \
-  && npm install --global --omit=dev @openai/codex@latest opencode-ai \
-  && npm cache clean --force \
-  && rm -rf /root/.npm /root/.cache \
+  && if [ "${INCLUDE_AI_CLIS}" = "true" ]; then \
+    npm install --global --omit=dev @openai/codex@latest opencode-ai \
+    && npm cache clean --force \
+    && rm -rf /root/.npm /root/.cache; \
+  fi \
   && apt-get update \
   && apt-get install -y --no-install-recommends openssh-client jq \
   && rm -rf /var/lib/apt/lists/* \
