@@ -12,7 +12,7 @@ RUN usermod -u $USER_UID --non-unique node \
   && groupmod -g $USER_GID --non-unique node \
   && usermod -g $USER_GID -d /paperclip node
 
-FROM base AS deps
+FROM base AS manifests
 WORKDIR /app
 COPY package.json pnpm-workspace.yaml pnpm-lock.yaml .npmrc ./
 COPY cli/package.json cli/
@@ -54,7 +54,26 @@ COPY server/src/services/copilot-connection-probe.ts server/src/services/
 
 # CI owns repository lock updates. Resolve manifest changes in the image's
 # private build tree, then install from that exact generated lock.
-RUN pnpm install --resolution-only --ignore-scripts --no-frozen-lockfile && pnpm install --frozen-lockfile
+FROM manifests AS deps
+RUN --mount=type=cache,id=paperclip-pnpm-store,target=/pnpm-store \
+  pnpm install --resolution-only --ignore-scripts --no-frozen-lockfile --store-dir /pnpm-store \
+  && pnpm install --frozen-lockfile --store-dir /pnpm-store
+
+# Runtime-only dependency tree. The server bundle (dist-runtime) keeps
+# third-party packages external and records absolute /app/node_modules/.pnpm/*
+# paths, so this tree must be installed at the same /app location from the same
+# resolved lockfile as `deps`. devDependencies, unrelated workspaces (ui, cli)
+# and musl native binaries (the image is glibc-only) are left out.
+FROM manifests AS prod-deps
+COPY --from=deps /app/pnpm-lock.yaml ./pnpm-lock.yaml
+RUN --mount=type=cache,id=paperclip-pnpm-store,target=/pnpm-store \
+  NODE_ENV=production pnpm install --frozen-lockfile --prod --store-dir /pnpm-store \
+    --filter "@paperclipai/server..." \
+    --filter "@paperclipai/paperclip-runner" \
+    --filter "./packages/plugins/*" \
+    --filter "@paperclipai/mcp-server" \
+  && rm -rf /app/node_modules/.pnpm/*musl* \
+  && find /app/node_modules/.pnpm -maxdepth 4 -xtype l -delete
 
 FROM base AS rust-toolchain
 WORKDIR /app
@@ -95,8 +114,11 @@ RUN cd /tmp/runner-toolchain && rustup show
 
 # Pin the recipe generator and its dependency lockfile. It is a build-only tool
 # and uses the same package-owned compiler as both native build stages.
+FROM docker.io/lukemathwalker/cargo-chef:0.1.73-rust-1.93.1-trixie AS cargo-chef-bin
+
 FROM rust-toolchain AS rust-chef
-RUN cd /tmp/runner-toolchain && cargo install cargo-chef --version 0.1.73 --locked
+COPY --from=cargo-chef-bin /usr/local/cargo/bin/cargo-chef /usr/local/cargo/bin/cargo-chef
+RUN cargo-chef --version | grep -q '0.1.73'
 
 FROM rust-chef AS runner-plan
 WORKDIR /app/packages/paperclip-runner
@@ -151,6 +173,12 @@ RUN pnpm --filter @paperclipai/server build:runtime \
   && test -f server/dist-runtime/index.mjs || (echo "ERROR: server runtime bundle missing" && exit 1)
 RUN rm -rf packages/paperclip-runner/runner/target
 
+# Shippable app tree: built output and sources from `build`, with the full
+# dev node_modules replaced by the runtime-only tree from `prod-deps`.
+FROM build AS app
+RUN find /app -name node_modules -type d -prune -exec rm -rf {} +
+COPY --from=prod-deps /app /app
+
 # Remote OpenCode and ACPX runs require a controller-owned provider pack to
 # verify the sandbox installation or stage matching assets. Ship it in the
 # standard image so downstream Cloud compositions inherit the same artifacts.
@@ -194,7 +222,7 @@ RUN echo "cli-tools-epoch: ${CLI_TOOLS_CACHE_EPOCH}" \
 COPY scripts/docker-entrypoint.sh /usr/local/bin/
 RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 
-COPY --chown=node:node --from=build /app /app
+COPY --chown=node:node --from=app /app /app
 
 COPY --from=runner-provider-pack /provider-pack /opt/paperclip-runner/provider-pack
 COPY --from=runner-provider-pack /provider-pack-transport/ /opt/paperclip-runner/
