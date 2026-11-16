@@ -2,8 +2,9 @@
 # podman build -f Dockerfile.custom --target production --build-arg-file Dockerfile.custom.args -t paperclip:custom .
 INSTALL_CODEX_CLI=false
 INSTALL_OPENCODE_CLI=true
+OPENCODE_VERSION=1.18.34
 INCLUDE_CODEX=false
-INCLUDE_OPENCODE=true
+INCLUDE_OPENCODE=false
 INCLUDE_OPENCODE_BASELINE=false
 INCLUDE_CLAUDE_SDK=true
 INCLUDE_COPILOT=false
