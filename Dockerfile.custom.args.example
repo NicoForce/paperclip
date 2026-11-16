@@ -1,0 +1,13 @@
+# cp Dockerfile.custom.args.example Dockerfile.custom.args
+# podman build -f Dockerfile.custom --target production --build-arg-file Dockerfile.custom.args -t paperclip:custom .
+INSTALL_CODEX_CLI=false
+INSTALL_OPENCODE_CLI=true
+INCLUDE_CODEX=false
+INCLUDE_OPENCODE=true
+INCLUDE_OPENCODE_BASELINE=false
+INCLUDE_CLAUDE_SDK=true
+INCLUDE_COPILOT=false
+INCLUDE_CURSOR_SDK=false
+INCLUDE_EMBEDDED_POSTGRES=true
+INCLUDE_COPILOT_ASSETS=false
+PRUNE_PACKAGES=
