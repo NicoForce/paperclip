@@ -32,3 +32,5 @@ INSTALL_DEVTOOLS=true
 INSTALL_AZURE_CLI=true
 TERRAFORM_MINOR=1.11
 KUBECTL_MINOR=1.37
+# Bump to force refresh of latest-tracking tools (devtools, global CLIs). Change value, rebuild.
+CLI_TOOLS_CACHE_EPOCH=1
