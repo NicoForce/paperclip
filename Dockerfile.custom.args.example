@@ -1,8 +1,18 @@
 # cp Dockerfile.custom.args.example Dockerfile.custom.args
 # podman build -f Dockerfile.custom --target production --build-arg-file Dockerfile.custom.args -t paperclip:custom .
+#
+# Paperclip runner (INCLUDE_PROVIDER_PACK / remote runner) needs, per provider:
+#   opencode: INCLUDE_OPENCODE=true + INCLUDE_OPENCODE_BASELINE=true (runner resolves opencode-linux-x64-baseline from node_modules, no PATH fallback)
+#   codex:    INCLUDE_CODEX=true
+#   claude:   INCLUDE_CLAUDE_SDK=true
+#   copilot:  INCLUDE_COPILOT=true + INCLUDE_COPILOT_ASSETS=true
+#   cursor:   INCLUDE_CURSOR_SDK=true
+# Legacy local adapters use global CLIs from PATH: INSTALL_CODEX_CLI / INSTALL_OPENCODE_CLI.
+# INCLUDE_EMBEDDED_POSTGRES=false requires external DATABASE_URL at runtime (not build time).
 INSTALL_CODEX_CLI=false
 INSTALL_OPENCODE_CLI=true
-OPENCODE_VERSION=1.19.5
+# latest = track newest at build time; pin (e.g. 1.19.5) for reproducible builds
+OPENCODE_VERSION=latest
 INCLUDE_CODEX=false
 INCLUDE_OPENCODE=true
 INCLUDE_OPENCODE_BASELINE=false
