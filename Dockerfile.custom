@@ -218,7 +218,8 @@ RUN set -e; \
     find /app -name node_modules -prune -o -type f \( -name '*.map' -o -name '*.d.ts' -o -name '*.d.mts' -o -name '*.d.cts' \) -print0 | xargs -0 -r rm -f; \
   fi; \
   if [ "${INCLUDE_SOURCES}" != "true" ]; then \
-    cd /app && rm -rf server/src ui/src packages/db/src packages/paperclip-runner/src; \
+    cd /app && rm -rf server/src ui/src packages/paperclip-runner/src; \
+    find packages/db/src -mindepth 1 -maxdepth 1 ! -name migrations -exec rm -rf {} +; \
   fi; \
   if [ "${INCLUDE_RUNNER_DIST}" != "true" ]; then \
     rm -rf /app/packages/paperclip-runner/dist; \
