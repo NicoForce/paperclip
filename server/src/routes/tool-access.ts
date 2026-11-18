@@ -3,7 +3,7 @@ import { aiConnectionRouterPluginKey } from "@paperclipai/shared";
 import { aiConnectionRouterService } from "../services/ai-connection-router.js";
 import { composioAppSetupSchema, composioAppsRefreshSchema, composioAppsSyncSchema, composioAppAccountSchema } from "@paperclipai/shared";
 import { aggregatorAppsSyncSchema, aggregatorAppsRefreshSchema, arcadeDiscoverySetupSchema } from "@paperclipai/shared/aggregator-apps";
-import { Router, type Request, type Response } from "express";
+import { Router, type Request, type RequestHandler, type Response } from "express";
 import type { Db } from "@paperclipai/db";
 import { agents, companies, connectionGrants, issueThreadInteractions, toolConnectionInstalls } from "@paperclipai/db";
 import { and, eq, or } from "drizzle-orm";
@@ -563,6 +563,24 @@ function connectorEnrollmentPrincipal(req: Request): string {
       resource: { type: "company", companyId },
     });
     if (!decision.allowed) throw forbidden(decision.explanation);
+  }
+
+  const agentConfigReadGranted = new WeakSet<Request>();
+  function agentConfigReadOr(guard: RequestHandler, options: { allowSelf?: boolean } = {}): RequestHandler {
+    return async (req, res, next) => {
+      if (req.actor.type === "agent") {
+        try {
+          const companyId = req.params.companyId as string;
+          if (options.allowSelf && req.actor.agentId === req.params.agentId) assertCompanyAccess(req, companyId);
+          else await assertAgentCanReadToolConfig(req, companyId);
+          agentConfigReadGranted.add(req);
+          next();
+          return;
+        } catch {
+        }
+      }
+      return guard(req, res, next);
+    };
   }
 
   async function assertBoardToolPermission(req: Request, companyId: string, permissionKey: PermissionKey) {
@@ -1680,10 +1698,14 @@ function connectorEnrollmentPrincipal(req: Request): string {
     res.json(result);
   });
 
-  router.get("/companies/:companyId/tools/applications", managementGuard("connections:read", "GET /companies/:companyId/tools/applications", { personal: true }), async (req, res) => {
+  router.get("/companies/:companyId/tools/applications", agentConfigReadOr(managementGuard("connections:read", "GET /companies/:companyId/tools/applications", { personal: true })), async (req, res) => {
     assertBoardOrAgent(req);
     const companyId = req.params.companyId as string;
     assertCompanyAccess(req, companyId);
+    if (agentConfigReadGranted.has(req)) {
+      res.json({ applications: (await svc.listApplications(companyId)).map(toAgentApplicationView) });
+      return;
+    }
     res.json({ applications: await svc.listApplications(companyId) });
   });
 
@@ -1742,10 +1764,14 @@ function connectorEnrollmentPrincipal(req: Request): string {
     res.json(application);
   });
 
-  router.get("/companies/:companyId/tools/connections", managementGuard("connections:read", "GET /companies/:companyId/tools/connections", { personal: true }), async (req, res) => {
+  router.get("/companies/:companyId/tools/connections", agentConfigReadOr(managementGuard("connections:read", "GET /companies/:companyId/tools/connections", { personal: true })), async (req, res) => {
     assertBoardOrAgent(req);
     const companyId = req.params.companyId as string;
     assertCompanyAccess(req, companyId);
+    if (agentConfigReadGranted.has(req)) {
+      res.json({ connections: (await svc.listConnections(companyId)).map(toAgentConnectionView) });
+      return;
+    }
     const connections = await svc.listConnections(companyId, connectionRequestUserId(req) ?? undefined);
     const canManageConnections = await isToolConnectionManagerQuiet(req, companyId);
     let visible = filterVisibleToolConnections(connections, { userId: connectionRequestUserId(req), canManageConnections });
@@ -2414,11 +2440,15 @@ function connectorEnrollmentPrincipal(req: Request): string {
     }
   });
 
-  router.get("/companies/:companyId/tools/profiles/effective/agents/:agentId", managementGuard("connections:profiles", "GET /companies/:companyId/tools/profiles/effective/agents/:agentId", { personal: true }), async (req, res) => {
+  router.get("/companies/:companyId/tools/profiles/effective/agents/:agentId", agentConfigReadOr(managementGuard("connections:profiles", "GET /companies/:companyId/tools/profiles/effective/agents/:agentId", { personal: true }), { allowSelf: true }), async (req, res) => {
     assertBoardOrAgent(req);
     const companyId = req.params.companyId as string;
     assertCompanyAccess(req, companyId);
     const effective = await svc.getEffectiveProfilesForAgent(companyId, req.params.agentId as string);
+    if (agentConfigReadGranted.has(req)) {
+      res.json({ ...effective, installedConnections: effective.installedConnections.map(toAgentConnectionView) });
+      return;
+    }
     const profiles = await filterConnectionManagementRows(db, req, "connections:profiles", effective.profiles, profile => ({ profileId: profile.id }));
     const connectionIds = [...new Set([...effective.allowedTools.map(tool => tool.connectionId), ...effective.installedConnections.map(connection => connection.id)])];
     const connections = await filterConnectionManagementRows(db, req, "connections:profiles", connectionIds, connectionId => ({ connectionId }));
