@@ -223,7 +223,7 @@ describeEmbeddedPostgres("tool connection removal", () => {
       access: { agentIds: [agentId] },
     }, { actorType: "user", actorId: "board-user" });
     await service.putConnectionInstalls(connected.connectionId, {
-      installs: [{ targetType: "agent", targetId: agentId, enabled: true }],
+      installs: [{ targetType: "agent", targetId: agentId }],
     }, { actorType: "user", actorId: "board-user" });
     return { service, connectionId: connected.connectionId, readEntry, profile: finished.profile };
   }
@@ -270,7 +270,6 @@ describeEmbeddedPostgres("tool connection removal", () => {
       secretsRetainedShared: 0,
       appProfile: "deleted",
       installsRemoved: 1,
-      applicationArchived: true,
     });
     expect(removed.removal.credentialRefsCleared).toBeGreaterThan(0);
     expect(removed.removal.secretBindingsRemoved).toBeGreaterThan(0);
@@ -466,8 +465,13 @@ describeEmbeddedPostgres("tool connection removal", () => {
     const otherConnection = await service.createConnection(company.id, {
       applicationId: otherApplication!.id,
       name: `Other connection ${randomUUID().slice(0, 8)}`,
+      connectionPurpose: "tool",
       transport: "mcp_remote",
+      authKind: "none",
+      ownership: "customer",
+      connectionKind: "managed",
       config: { url: MCP_URL },
+      transportConfig: { url: MCP_URL },
       credentialSecretRefs: [
         { secretId: alsoUsedSecret.id, versionSelector: "latest", configPath: "credentials.shared", required: false, label: "Shared key" },
       ],
@@ -660,7 +664,6 @@ describeEmbeddedPostgres("tool connection removal", () => {
       transport: "mcp_remote",
       appProfile: "deleted",
       secretsRetainedShared: 0,
-      applicationArchived: true,
     });
     expect(Number((receipt!.details as Record<string, unknown>).secretsRevoked)).toBeGreaterThan(0);
     const receiptText = JSON.stringify(receipt!.details);

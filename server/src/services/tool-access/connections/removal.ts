@@ -1,5 +1,10 @@
+import { notifyGitHubCredentialChange } from "../../github-connection-notifications.js";
+import { notifyVoiceChange } from "../../voice/voice-recovery-notifications.js";
+import { notifyChatEndpointWork } from "../../chat-work-notifications.js";
+import { notifyToolConnectionHealth } from "../../tool-connection-health-notifications.js";
 import { toConnection } from "./projection.js";
-import { actorBinding } from "../actor.js";
+import { actorBinding, connectionActorUserId } from "../actor.js";
+import { stageSlackCloudEnrollmentIntent } from "../../chat-channels/slack/cloud-enrollment.js";
 import { vercelConnectResourcesFor } from "../vercel-credentials.js";
 import type { ActorInfo } from "../types.js";
 import { chatCredentialMutationLease } from "../../chat-credential-mutation-lease.js";
@@ -10,7 +15,7 @@ import { browserUseService } from "../../browser-use.js";
 import { emitConnectionUpdated } from "../../connector-telemetry.js";
 import { and, eq, inArray, isNull, ne, sql } from "drizzle-orm";
 import type { Db } from "@paperclipai/db";
-import { connectionGrants, connectionTokenIssuances, companySecretBindings, companySecrets, userSecretDefinitions, userSecretDeclarations, toolApplications, toolCatalogEntries, toolConnectionInstalls, toolConnections, toolOauthStates, toolGatewaySessions, toolMcpGateways, toolMcpGatewayTokens, toolProfileBindings, toolProfileEntries, toolProfiles, toolRuntimeSlots } from "@paperclipai/db";
+import { connectionGrants, connectionTokenIssuances, companySecretBindings, companySecrets, userSecretDefinitions, userSecretDeclarations, toolCatalogEntries, toolConnectionInstalls, toolConnections, toolOauthStates, toolGatewaySessions, toolMcpGateways, toolMcpGatewayTokens, toolProfileBindings, toolProfileEntries, toolProfiles, toolRuntimeSlots } from "@paperclipai/db";
 import type { ToolConnectionRemovalResult, ToolConnectionRemovalSummary } from "@paperclipai/shared";
 import { notFound } from "../../../errors.js";
 import { logger } from "../../../middleware/logger.js";
@@ -228,6 +233,7 @@ async function removeConnection(
     companyId?: string,
     actor?: ActorInfo,
   ): Promise<ToolConnectionRemovalResult> {
+    await actor?.managementContext?.reauthorize();
     const connection = await getConnectionRow(connectionId, companyId);
     const [endpoint] = await db.select().from(chatEndpoints).where(and(eq(chatEndpoints.connectionId, connection.id), eq(chatEndpoints.companyId, connection.companyId), eq(chatEndpoints.provider, "slack")));
     if (!endpoint) return removeConnectionUnlocked(connectionId, companyId, actor);
@@ -236,6 +242,8 @@ async function removeConnection(
         await lease.assertOwned(tx);
         await tx.update(chatEndpoints).set({ status: "archived", updatedAt: new Date() }).where(eq(chatEndpoints.id, endpoint.id));
         await tx.update(toolConnections).set({ status: "archived", enabled: false, updatedAt: new Date() }).where(eq(toolConnections.id, connection.id));
+        await stageSlackCloudEnrollmentIntent(tx as unknown as Db, endpoint.id, connectionActorUserId(actor));
+        await lease.assertOwned(tx);
       });
       await removeSlackRegistration(db, endpoint.id, lease);
       return removeConnectionUnlocked(connectionId, companyId, actor);
@@ -243,6 +251,7 @@ async function removeConnection(
   }
 
   async function removeConnectionUnlocked(connectionId: string, companyId?: string, actor?: ActorInfo): Promise<ToolConnectionRemovalResult> {
+    await actor?.managementContext?.reauthorize();
     const connection = await getConnectionRow(connectionId, companyId);
     forgetMcpHttpSessions(connection.id);
     const now = new Date();
@@ -536,43 +545,17 @@ async function removeConnection(
       .returning({ id: connectionTokenIssuances.id });
 
     const archived = await db.transaction(async (tx) => {
-      await tx.select({ id: toolApplications.id }).from(toolApplications)
-        .where(and(eq(toolApplications.id, connection.applicationId), eq(toolApplications.companyId, connection.companyId)))
-        .for("update");
+      if (connection.transport === "chat_sdk") await notifyChatEndpointWork(tx, connection.id, connection.companyId);
+      if (connection.transport === "voice") await notifyVoiceChange(tx, { kind: "connection", id: connection.id });
+      await notifyGitHubCredentialChange(tx, connection);
+      await notifyToolConnectionHealth(tx, connection);
       const [updatedConnection] = await tx
         .update(toolConnections)
         .set({ status: "archived", enabled: false, updatedAt: now })
         .where(eq(toolConnections.id, connection.id))
         .returning();
       if (!updatedConnection) throw notFound("Tool connection not found");
-
-      const remainingConnections = await tx
-        .select({ id: toolConnections.id })
-        .from(toolConnections)
-        .where(
-          and(
-            eq(toolConnections.applicationId, updatedConnection.applicationId),
-            ne(toolConnections.status, "archived"),
-          ),
-        )
-        .limit(1);
-
-      let applicationArchived = false;
-      if (remainingConnections.length === 0) {
-        const [application] = await tx
-          .update(toolApplications)
-          .set({ status: "archived", archivedAt: now, updatedAt: now })
-          .where(
-            and(
-              eq(toolApplications.id, updatedConnection.applicationId),
-              ne(toolApplications.status, "archived"),
-            ),
-          )
-          .returning({ id: toolApplications.id });
-        applicationArchived = Boolean(application);
-      }
-
-      return { connection: updatedConnection, applicationArchived };
+      return { connection: updatedConnection };
     });
     emitConnectionUpdated(archived.connection, connection, "archive");
 
@@ -649,7 +632,6 @@ async function removeConnection(
         runtimeSlotsStopped,
         gatewayTokensRevoked,
         gatewaySessionsRevoked,
-        applicationArchived: archived.applicationArchived,
         externalCredentialCleanup,
       },
     };

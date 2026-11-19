@@ -335,6 +335,7 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
     env,
     config,
     runtimeMcpServers,
+    sandboxToolOomPreference: executionTarget?.kind === "remote" && executionTarget.transport === "sandbox",
   });
   const localRuntimeConfigHome =
     preparedRuntimeConfig.notes.length > 0 ? preparedRuntimeConfig.env.XDG_CONFIG_HOME : "";

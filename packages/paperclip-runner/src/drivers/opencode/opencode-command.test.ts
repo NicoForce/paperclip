@@ -58,3 +58,19 @@ it("rejects executables outside the platform package or without execute permissi
   await symlink(outside, install.executable);
   expect(() => resolvePinnedOpenCodeCommand(install.issuer, { platform: "darwin", architecture: "arm64" })).toThrow("escapes its qualified platform package");
 });
+
+it("prefers PAPERCLIP_OPENCODE_COMMAND when it points to an executable file", async () => {
+  const install = await installed("source", "linux", "x64", "opencode-linux-x64-baseline");
+  const alt = join(install.root, "alt-opencode");
+  await writeFile(alt, "#!/bin/sh\n", { mode: 0o755 });
+  const previous = process.env.PAPERCLIP_OPENCODE_COMMAND;
+  process.env.PAPERCLIP_OPENCODE_COMMAND = alt;
+  try {
+    expect(resolvePinnedOpenCodeCommand(install.issuer, { platform: "linux", architecture: "x64" })).toBe(await realpath(alt));
+    process.env.PAPERCLIP_OPENCODE_COMMAND = join(install.root, "missing");
+    expect(resolvePinnedOpenCodeCommand(install.issuer, { platform: "linux", architecture: "x64" })).toBe(install.executable);
+  } finally {
+    if (previous === undefined) delete process.env.PAPERCLIP_OPENCODE_COMMAND;
+    else process.env.PAPERCLIP_OPENCODE_COMMAND = previous;
+  }
+});
