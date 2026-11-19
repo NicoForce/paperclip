@@ -29,6 +29,7 @@ import { clearLegacyChatMessageRequests } from "@/lib/chat-message-request";
 import { agentChatDraft } from "@/lib/agent-chat-draft";
 import { trackRecentProject } from "@/lib/recent-projects";
 import { ExecutionBlockerNotice } from "../components/ExecutionBlockerNotice";
+import { ExecutionReconciliationRecovery } from "../components/ExecutionReconciliationRecovery";
 import type { TaskComposerPause } from "../components/task-chat/TaskChatPausedTakeover";
 import { TaskDetailTasksPanel } from "@/components/task-detail/TaskDetailTasksPanel";
 import { IssueCreatedFromNote } from "@/components/task-detail/IssueCreatedFromNote";
@@ -8197,6 +8198,9 @@ export function TaskDetailSurface({ conversation, tasksTab }: { tasksTab?: TaskS
                 && isRetainedWorkspaceExportCause(issue.executionBlocker.cause) && retainedRecoveryOwnsRetry)} onRetry={taskRetry.retry}
               optimistic={taskRetry.optimistic} takingLonger={taskRetry.takingLonger} error={taskRetry.error} />
           )}
+          <ExecutionReconciliationRecovery key={`execution-reconciliation:${issue.executionBlocker?.recoveryActionId ?? issue.id}`}
+            className={shellSectionClass} issueId={issue.id} blocker={issue.executionBlocker}
+            canManage={canResolveBoardRecoveryAction} />
 
           {issue.status === "in_review" && issue.externalConversationState === "waiting" && (
             <p role="status" className="text-sm text-muted-foreground">Reply sent. Send a message to continue.</p>
