@@ -140,6 +140,20 @@ describePostgres("already available connection requests", () => {
       .toMatchObject({ allowed: state === "ready" });
   });
 
+  it("does not wait on an open pending card with no addressee", async () => {
+    const f = await seed();
+    await db.update(issueThreadInteractions).set({ status: "expired" }).where(eq(issueThreadInteractions.id, f.intent.id));
+    await db.insert(issueThreadInteractions).values({ companyId: f.companyId, issueId: f.issueId, kind: "request_confirmation",
+      status: "pending", addresseeUserId: null, continuationPolicy: "wake_assignee",
+      payload: { version: 1, prompt: "Open?", supersedeOnUserComment: false } });
+    const [task] = await db.select().from(issues).where(eq(issues.id, f.issueId));
+    expect(await connectionContinuationPendingResponse(db, task, "connection-owner")).toBeNull();
+    await db.insert(issueThreadInteractions).values({ companyId: f.companyId, issueId: f.issueId, kind: "request_confirmation",
+      status: "pending", addresseeUserId: "someone-else", continuationPolicy: "wake_assignee",
+      payload: { version: 1, prompt: "Named?", supersedeOnUserComment: false } });
+    expect(await connectionContinuationPendingResponse(db, task, "connection-owner")).toBe("interaction");
+  });
+
   it("keeps a retry under another user's identity waiting for its response", async () => {
     const f = await seed(); const run = await retry(f);
     await db.update(heartbeatRuns).set({ responsibleUserId: "someone-else" }).where(eq(heartbeatRuns.id, run.id));
