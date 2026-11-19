@@ -106,6 +106,10 @@ export async function connectionContinuationPendingResponse(db: Db, task: Task, 
       && "connectionId" in interaction.result && typeof interaction.result.connectionId === "string";
     if (interaction.status !== "pending" && !retired) continue;
     if (retired && (interaction.payload as { requestingAgentId?: string }).requestingAgentId !== task.assigneeAgentId) continue;
+    // An open card (no addressee) is answerable by anyone and names nobody to
+    // wait on, so it must not hold a continuation the responsible user started.
+    // Connection requests still need a named owner to be satisfied or answered.
+    if (!interaction.addresseeUserId && interaction.kind !== "connection_intent") continue;
     if (interaction.addresseeUserId !== responsibleUserId) return "interaction";
     const connection = await findAvailableToolConnection(db, task, { ...interaction, status: "pending" }, policyRunId);
     // Historical system retirements describe a service need, not a permanent
