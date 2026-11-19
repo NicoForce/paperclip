@@ -1224,7 +1224,7 @@ export function toolAccessPolicyService(db: Pick<Db, "select" | "insert" | "upda
     const bindings = await cachedRead(cache, `profile-bindings:${ctx.companyId}`, async () =>
       db.select().from(toolProfileBindings).where(eq(toolProfileBindings.companyId, ctx.companyId)));
     const matchingBindings = bindings.filter((binding) => targetMatches(binding, ctx));
-    if (matchingBindings.length === 0) return { profiles: [], entries: [] as Array<typeof toolProfileEntries.$inferSelect> };
+    if (matchingBindings.length === 0) return { profiles: [], entries: [] as Array<typeof toolProfileEntries.$inferSelect>, gatewayOnly: false };
     const candidateProfileIds = profileIdsInBindingOrder(matchingBindings);
     const candidateProfiles = await cachedRead(cache, `profiles:${ctx.companyId}:${[...candidateProfileIds].sort().join(",")}`, async () =>
       db.select().from(toolProfiles).where(and(
@@ -1261,7 +1261,7 @@ export function toolAccessPolicyService(db: Pick<Db, "select" | "insert" | "upda
       ? await cachedRead(cache, `profile-entries:${ctx.companyId}:${[...activeProfileIds].sort().join(",")}`, async () =>
           db.select().from(toolProfileEntries).where(and(eq(toolProfileEntries.companyId, ctx.companyId), inArray(toolProfileEntries.profileId, activeProfileIds))))
       : [];
-    return { profiles: activeProfiles, entries };
+    return { profiles: activeProfiles, entries, gatewayOnly: gateway?.defaultProfileMode === "gateway_only" };
   }
 
   async function explicitGrant(ctx: ToolAccessContext, cache?: ToolAccessDecisionCache, options: { toolTargetedOnly?: boolean } = {}): Promise<boolean> {
@@ -1677,7 +1677,8 @@ export function toolAccessPolicyService(db: Pick<Db, "select" | "insert" | "upda
     // application. A grant that names the action, connection or application
     // still applies. Board users keep their operator grants.
     const governedByConnectionProfile = ctx.actorType === "agent" && !!ctx.connectionId && (
-      profileState.profiles.some((profile) => isConnectionAccessProfile(profile, ctx.connectionId))
+      profileState.gatewayOnly
+      || profileState.profiles.some((profile) => isConnectionAccessProfile(profile, ctx.connectionId))
       || profileState.entries.some((entry) => entry.connectionId === ctx.connectionId || profileEntryMatches(entry, ctx))
     );
     if (await explicitGrant(ctx, cache, { toolTargetedOnly: governedByConnectionProfile })) {
