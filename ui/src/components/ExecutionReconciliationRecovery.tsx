@@ -41,8 +41,8 @@ export function ExecutionReconciliationRecovery({ issueId, blocker, canManage, c
     },
   });
   if (!blocker || !blocker.recoveryActionId || !blocker.runId || !requiresExecutionReconciliation(blocker.cause)) return null;
-  return <details className={className} data-testid="execution-reconciliation-recovery">
-    <summary className="cursor-pointer text-sm">Confirm the previous run stopped</summary>
+  return <details open className={`${className ?? ""} rounded-md border border-amber-500/40 bg-amber-500/5 p-3`} data-testid="execution-reconciliation-recovery">
+    <summary className="cursor-pointer text-sm font-medium">Confirm the previous run stopped</summary>
     <p className="text-sm text-muted-foreground">
       Paperclip cannot prove the previous run stopped or what it did. Confirm it here to let new messages start. Existing work limits still apply.
     </p>
