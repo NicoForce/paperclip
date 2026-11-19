@@ -8198,11 +8198,9 @@ export function TaskDetailSurface({ conversation, tasksTab }: { tasksTab?: TaskS
                 && isRetainedWorkspaceExportCause(issue.executionBlocker.cause) && retainedRecoveryOwnsRetry)} onRetry={taskRetry.retry}
               optimistic={taskRetry.optimistic} takingLonger={taskRetry.takingLonger} error={taskRetry.error} />
           )}
-          {resolvedDetailTab === "chat" && (
-            <ExecutionReconciliationRecovery key={`execution-reconciliation:${issue.executionBlocker?.recoveryActionId ?? issue.id}`}
-              className={shellSectionClass} issueId={issue.id} blocker={issue.executionBlocker}
-              canManage={canResolveBoardRecoveryAction} />
-          )}
+          <ExecutionReconciliationRecovery key={`execution-reconciliation:${issue.executionBlocker?.recoveryActionId ?? issue.id}`}
+            className={shellSectionClass} issueId={issue.id} blocker={issue.executionBlocker}
+            canManage={canResolveBoardRecoveryAction} />
 
           {issue.status === "in_review" && issue.externalConversationState === "waiting" && (
             <p role="status" className="text-sm text-muted-foreground">Reply sent. Send a message to continue.</p>
