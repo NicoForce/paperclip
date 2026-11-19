@@ -980,7 +980,7 @@ export async function buildPaperclipRuntimeMcpServers(input: {
         identityContextId: runIdentity?.activeIdentityContextId,
       })).map(tool => tool.connectionId))
     : new Set<string>();
-  const assignedConnections = resolvedInstalledConnections.filter(
+  let assignedConnections = resolvedInstalledConnections.filter(
     (connection) =>
       permittedConnectionIds.has(connection.id) &&
       connection.status === "active" &&
@@ -993,13 +993,31 @@ export async function buildPaperclipRuntimeMcpServers(input: {
       (connection.transport === "mcp_remote" ||
         connection.transport === "local_stdio" || isBrowserUseConnection(connection) || restConnectorFor(connection) || githubBotConnectionIds.has(connection.id) || spekoConnectionIds.has(connection.id)),
   );
-  const assignedConnectionIds = new Set(
-    assignedConnections.map((connection) => connection.id),
-  );
-  const assignedTools = effective.allowedTools.filter((tool) =>
-    assignedConnectionIds.has(tool.connectionId),
-  );
   const service = createToolGatewayService(input.db);
+  const policyAllowedCatalogIds = await service.allowedCatalogEntryIdsForAgent({
+    companyId: input.agent.companyId,
+    agentId: input.agent.id,
+    connectionIds: assignedConnections.map((connection) => connection.id),
+    heartbeatRunId: input.runId,
+    issueId: runIdentity?.issueId ?? null,
+  });
+  const preFilterConnectionTools = effective.allowedTools.filter((tool) =>
+    assignedConnections.some((connection) => connection.id === tool.connectionId),
+  );
+  const assignedTools = preFilterConnectionTools.filter((tool) =>
+    policyAllowedCatalogIds.has(tool.id),
+  );
+  const policyTrimmedConnectionIds = new Set(
+    preFilterConnectionTools
+      .filter((tool) => !policyAllowedCatalogIds.has(tool.id))
+      .map((tool) => tool.connectionId),
+  );
+  const assignedConnectionIds = new Set(
+    assignedTools.map((tool) => tool.connectionId),
+  );
+  assignedConnections = assignedConnections.filter((connection) =>
+    assignedConnectionIds.has(connection.id),
+  );
   if (assignedConnections.length === 0) {
     await service.recordRuntimeMcpDeliveryDiagnostic({
       companyId: input.agent.companyId,
@@ -1051,7 +1069,7 @@ export async function buildPaperclipRuntimeMcpServers(input: {
     );
     const entries = [
       ...assignedConnections
-        .filter((connection) => fullConnectionIds.has(connection.id))
+        .filter((connection) => fullConnectionIds.has(connection.id) && !policyTrimmedConnectionIds.has(connection.id))
         .map((connection) => ({
           selectorType: "connection" as const,
           effect: "include" as const,
@@ -1059,7 +1077,7 @@ export async function buildPaperclipRuntimeMcpServers(input: {
           connectionId: connection.id,
         })),
       ...assignedTools
-        .filter((tool) => !fullConnectionIds.has(tool.connectionId))
+        .filter((tool) => !fullConnectionIds.has(tool.connectionId) || policyTrimmedConnectionIds.has(tool.connectionId))
         .map((tool) => ({
           selectorType: "catalog_entry" as const,
           effect: "include" as const,

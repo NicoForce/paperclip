@@ -9568,6 +9568,35 @@ export function createToolGatewayService(
       return resources;
     },
 
+    async allowedCatalogEntryIdsForAgent(input: {
+      companyId: string;
+      agentId: string;
+      connectionIds: string[];
+      heartbeatRunId?: string | null;
+      issueId?: string | null;
+      projectId?: string | null;
+    }): Promise<Set<string>> {
+      if (input.connectionIds.length === 0) return new Set();
+      const tools = await connectedMcpToolsForCompany(input.companyId, input.connectionIds);
+      const decisions = await decideToolsForListing(tools, (tool) =>
+        policyInputForAgentTool({
+          companyId: input.companyId,
+          agentId: input.agentId,
+          heartbeatRunId: input.heartbeatRunId,
+          issueId: input.issueId,
+          projectId: input.projectId,
+          tool,
+        }),
+      );
+      return new Set(
+        decisions.flatMap(({ tool, decision }) =>
+          (decision.allowed || decision.decision === "require_approval") && tool.catalogEntryId
+            ? [tool.catalogEntryId]
+            : [],
+        ),
+      );
+    },
+
     async summarizeConnectionAccessForAgent(input: {
       companyId: string;
       connectionId: string;

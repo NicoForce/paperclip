@@ -1224,7 +1224,7 @@ export function toolAccessPolicyService(db: Pick<Db, "select" | "insert" | "upda
     const bindings = await cachedRead(cache, `profile-bindings:${ctx.companyId}`, async () =>
       db.select().from(toolProfileBindings).where(eq(toolProfileBindings.companyId, ctx.companyId)));
     const matchingBindings = bindings.filter((binding) => targetMatches(binding, ctx));
-    if (matchingBindings.length === 0) return { profiles: [], entries: [] as Array<typeof toolProfileEntries.$inferSelect> };
+    if (matchingBindings.length === 0) return { profiles: [], entries: [] as Array<typeof toolProfileEntries.$inferSelect>, offByConnectionProfile: false };
     const candidateProfileIds = profileIdsInBindingOrder(matchingBindings);
     const candidateProfiles = await cachedRead(cache, `profiles:${ctx.companyId}:${[...candidateProfileIds].sort().join(",")}`, async () =>
       db.select().from(toolProfiles).where(and(
@@ -1261,7 +1261,20 @@ export function toolAccessPolicyService(db: Pick<Db, "select" | "insert" | "upda
       ? await cachedRead(cache, `profile-entries:${ctx.companyId}:${[...activeProfileIds].sort().join(",")}`, async () =>
           db.select().from(toolProfileEntries).where(and(eq(toolProfileEntries.companyId, ctx.companyId), inArray(toolProfileEntries.profileId, activeProfileIds))))
       : [];
-    return { profiles: activeProfiles, entries };
+    const appProfile = ctx.connectionId
+      ? candidateProfiles.find((profile) => profile.status === "active"
+        && profile.profileKey === `app:${ctx.connectionId}`
+        && isConnectionAccessProfile(profile, ctx.connectionId))
+      : undefined;
+    let offByConnectionProfile = false;
+    if (appProfile && appProfile.defaultAction !== "allow") {
+      const appEntries = await cachedRead(cache, `profile-entries:${ctx.companyId}:${appProfile.id}`, async () =>
+        db.select().from(toolProfileEntries).where(and(eq(toolProfileEntries.companyId, ctx.companyId), eq(toolProfileEntries.profileId, appProfile.id))));
+      const matching = appEntries.filter((entry) => profileEntryMatches(entry, ctx));
+      offByConnectionProfile = matching.some((entry) => entry.effect === "exclude")
+        || !matching.some((entry) => entry.effect === "include");
+    }
+    return { profiles: activeProfiles, entries, offByConnectionProfile };
   }
 
   async function explicitGrant(ctx: ToolAccessContext, cache?: ToolAccessDecisionCache, options: { toolTargetedOnly?: boolean } = {}): Promise<boolean> {
@@ -1680,6 +1693,9 @@ export function toolAccessPolicyService(db: Pick<Db, "select" | "insert" | "upda
       profileState.profiles.some((profile) => isConnectionAccessProfile(profile, ctx.connectionId))
       || profileState.entries.some((entry) => entry.connectionId === ctx.connectionId || profileEntryMatches(entry, ctx))
     );
+    if (ctx.actorType === "agent" && profileState.offByConnectionProfile && !permittedByProfile) {
+      return decision("deny", "deny_default", "Tool is turned Off in the connection's access profile.", effectiveProfileIds, [], { redactionPlan: redaction.redactionPlan });
+    }
     if (await explicitGrant(ctx, cache, { toolTargetedOnly: governedByConnectionProfile })) {
       return decision("allow", "allow_explicit_grant", "Tool access allowed by explicit grant.", effectiveProfileIds, [], { redactionPlan: redaction.redactionPlan });
     }
