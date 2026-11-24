@@ -181,7 +181,7 @@ const TARGET_KEYS = [
   "subject",
 ] as const;
 
-const TARGET_MAX = 96;
+const TARGET_MAX = 8 * 1024;
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -289,7 +289,7 @@ function appendThinkingText(
   lines.push(...fragments.slice(1));
 }
 
-const DETAIL_MAX = 600;
+const DETAIL_MAX = 64 * 1024;
 const PROTOCOL_OUTPUT_MAX = 8 * 1024;
 
 function objectRecord(value: unknown): Record<string, unknown> {
