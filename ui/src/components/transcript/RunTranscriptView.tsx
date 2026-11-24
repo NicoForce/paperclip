@@ -256,8 +256,8 @@ function mergeToolInput(previous: unknown, incoming: unknown): unknown {
   return incoming;
 }
 
-function summarizeToolInput(name: string, input: unknown, density: TranscriptDensity): string {
-  const compactMax = density === "compact" ? 72 : 120;
+function summarizeToolInput(name: string, input: unknown, density: TranscriptDensity, full = false): string {
+  const compactMax = full ? Number.POSITIVE_INFINITY : density === "compact" ? 72 : 120;
   if (typeof input === "string") {
     const normalized = isCommandTool(name, input) ? stripWrappedShell(input) : compactWhitespace(input);
     return truncate(normalized, compactMax);
@@ -1257,8 +1257,8 @@ function TranscriptCommandGroup({
                 )}>
                   <TerminalSquare className="h-3 w-3" />
                 </span>
-                <span className={cn("font-mono break-all", compact ? "text-(length:--text-micro)" : "text-xs")}>
-                  {summarizeToolInput("command_execution", item.input, density)}
+                <span className={cn("min-w-0 whitespace-pre-wrap font-mono break-all", compact ? "text-(length:--text-micro)" : "text-xs")}>
+                  {summarizeToolInput("command_execution", item.input, density, true)}
                 </span>
               </div>
               {item.result && (
