@@ -244,6 +244,8 @@ import {
   hasVisibleMonitorSurface,
 } from "../components/IssueMonitorBanner";
 import { IssueScheduledRetryCard } from "../components/IssueScheduledRetryCard";
+import { deriveMonitorState } from "../lib/issue-monitor";
+import { useRetryNowMutation } from "../hooks/useRetryNowMutation";
 import { ExternallyConnectedTaskBanner } from "../components/chat/ExternallyConnectedTaskBanner";
 import {
   IssueProperties,
@@ -4948,6 +4950,7 @@ export function TaskDetailSurface({ conversation, tasksTab }: { tasksTab?: TaskS
     },
   });
 
+  const retryScheduledNow = useRetryNowMutation(issueId);
   const checkIssueMonitorNow = useMutation({
     mutationKey: ["check-issue-monitor-now", issueId],
     mutationFn: () => issuesApi.checkMonitorNow(issueId!),
@@ -4971,6 +4974,22 @@ export function TaskDetailSurface({ conversation, tasksTab }: { tasksTab?: TaskS
       });
     },
   });
+
+  const monitorIsScheduledRetryOnly = issue
+    ? deriveMonitorState(issue).source === "scheduled-retry"
+    : false;
+  const handleMonitorCheckNow = () => {
+    if (monitorIsScheduledRetryOnly) retryScheduledNow.mutate();
+    else checkIssueMonitorNow.mutate();
+  };
+  const monitorCheckPending = monitorIsScheduledRetryOnly
+    ? retryScheduledNow.isPending
+    : checkIssueMonitorNow.isPending;
+  const monitorCheckError = monitorIsScheduledRetryOnly
+    ? retryScheduledNow.lastError?.message ?? null
+    : checkIssueMonitorNow.error
+      ? describeError(checkIssueMonitorNow.error, { action: "check the monitor" }).body
+      : null;
 
   const approvalDecision = useMutation({
     mutationFn: async ({
@@ -6272,8 +6291,8 @@ export function TaskDetailSurface({ conversation, tasksTab }: { tasksTab?: TaskS
       onRetryExternalObjects: externalObjectsState.isEnabled
         ? externalObjectsState.refetch
         : undefined,
-      onCheckMonitorNow: () => checkIssueMonitorNow.mutate(),
-      checkingMonitorNow: checkIssueMonitorNow.isPending,
+      onCheckMonitorNow: handleMonitorCheckNow,
+      checkingMonitorNow: monitorCheckPending,
       documentDeepLink:
         documentDeepLink?.issueId === panelIssue.id ? documentDeepLink : null,
       onAttachmentOpened: handleAttachmentOpened,
@@ -6337,8 +6356,8 @@ export function TaskDetailSurface({ conversation, tasksTab }: { tasksTab?: TaskS
     relationIssueLinkState,
     streamlinedTaskDetailEnabled,
     resolvedHasActiveRun,
-    checkIssueMonitorNow.isPending,
-    checkIssueMonitorNow.mutate,
+    monitorCheckPending,
+    handleMonitorCheckNow,
     externalObjectsState.isEnabled,
     externalObjectsState.groups,
     externalObjectsState.isLoading,
@@ -8057,9 +8076,9 @@ export function TaskDetailSurface({ conversation, tasksTab }: { tasksTab?: TaskS
         onCancelMonitor={() => cancelIssueMonitor.mutateAsync()}
         issue={issue}
         workProducts={workProducts}
-        checkError={checkIssueMonitorNow.error ? describeError(checkIssueMonitorNow.error, { action: "check the monitor" }).body : null}
-        onCheckNow={() => checkIssueMonitorNow.mutate()}
-        checkingNow={checkIssueMonitorNow.isPending}
+        checkError={monitorCheckError}
+        onCheckNow={handleMonitorCheckNow}
+        checkingNow={monitorCheckPending}
       />
 
       {taskChatShellEnabled ? null : (
@@ -8642,9 +8661,9 @@ export function TaskDetailSurface({ conversation, tasksTab }: { tasksTab?: TaskS
                         issue={issue}
                         hasActiveRun={hasLiveRuns}
                         workProducts={workProducts}
-                        checkError={checkIssueMonitorNow.error ? describeError(checkIssueMonitorNow.error, { action: "check the monitor" }).body : null}
-                        onCheckNow={() => checkIssueMonitorNow.mutate()}
-                        checkingNow={checkIssueMonitorNow.isPending}
+                        checkError={monitorCheckError}
+                        onCheckNow={handleMonitorCheckNow}
+                        checkingNow={monitorCheckPending}
                       />
                     ) : null
                   }
@@ -8964,8 +8983,8 @@ export function TaskDetailSurface({ conversation, tasksTab }: { tasksTab?: TaskS
                         ? externalObjectsState.refetch
                         : undefined
                     }
-                    onCheckMonitorNow={() => checkIssueMonitorNow.mutate()}
-                    checkingMonitorNow={checkIssueMonitorNow.isPending}
+                    onCheckMonitorNow={handleMonitorCheckNow}
+                    checkingMonitorNow={monitorCheckPending}
                     fileTabsEnabled={fileViewerEnabled}
                     streamlinedTabs={streamlinedTaskDetailEnabled}
                     showSubtasksTab={streamlinedTaskDetailEnabled}
@@ -9029,8 +9048,8 @@ export function TaskDetailSurface({ conversation, tasksTab }: { tasksTab?: TaskS
                             ? externalObjectsState.refetch
                             : undefined
                         }
-                        onCheckMonitorNow={() => checkIssueMonitorNow.mutate()}
-                        checkingMonitorNow={checkIssueMonitorNow.isPending}
+                        onCheckMonitorNow={handleMonitorCheckNow}
+                        checkingMonitorNow={monitorCheckPending}
                         documentDeepLink={
                           documentDeepLink?.issueId === issue.id
                             ? documentDeepLink
