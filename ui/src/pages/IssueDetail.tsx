@@ -4978,10 +4978,12 @@ export function TaskDetailSurface({ conversation, tasksTab }: { tasksTab?: TaskS
   const monitorIsScheduledRetryOnly = issue
     ? deriveMonitorState(issue).source === "scheduled-retry"
     : false;
-  const handleMonitorCheckNow = () => {
-    if (monitorIsScheduledRetryOnly) retryScheduledNow.mutate();
-    else checkIssueMonitorNow.mutate();
-  };
+  const retryScheduledNowMutate = retryScheduledNow.mutate;
+  const checkIssueMonitorNowMutate = checkIssueMonitorNow.mutate;
+  const handleMonitorCheckNow = useCallback(() => {
+    if (monitorIsScheduledRetryOnly) retryScheduledNowMutate();
+    else checkIssueMonitorNowMutate();
+  }, [monitorIsScheduledRetryOnly, retryScheduledNowMutate, checkIssueMonitorNowMutate]);
   const monitorCheckPending = monitorIsScheduledRetryOnly
     ? retryScheduledNow.isPending
     : checkIssueMonitorNow.isPending;
