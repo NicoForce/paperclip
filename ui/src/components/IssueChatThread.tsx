@@ -1748,7 +1748,7 @@ function IssueChatToolPart({
                         className={cn(
                           "text-xs leading-5 text-foreground/70",
                           detail.tone === "code" &&
-                            "font-mono text-(length:--text-micro)",
+                            "whitespace-pre-wrap break-all font-mono text-(length:--text-micro)",
                         )}
                       >
                         {detail.value}
@@ -1762,7 +1762,7 @@ function IssueChatToolPart({
                 <div className="mb-1 text-(length:--text-nano) font-semibold uppercase tracking-(--tracking-eyebrow) text-muted-foreground/60">
                   Input
                 </div>
-                <CopyablePreBlock className="overflow-x-auto rounded-md bg-accent/30 p-2 text-(length:--text-micro) leading-4 text-foreground/70">
+                <CopyablePreBlock className="overflow-x-auto whitespace-pre-wrap break-words rounded-md bg-accent/30 p-2 text-(length:--text-micro) leading-4 text-foreground/70">
                   {rawArgsText}
                 </CopyablePreBlock>
               </div>
@@ -1772,7 +1772,7 @@ function IssueChatToolPart({
                 <div className="mb-1 text-(length:--text-nano) font-semibold uppercase tracking-(--tracking-eyebrow) text-muted-foreground/60">
                   Result
                 </div>
-                <CopyablePreBlock className="overflow-x-auto rounded-md bg-accent/30 p-2 text-(length:--text-micro) leading-4 text-foreground/70">
+                <CopyablePreBlock className="overflow-x-auto whitespace-pre-wrap break-words rounded-md bg-accent/30 p-2 text-(length:--text-micro) leading-4 text-foreground/70">
                   {resultText}
                 </CopyablePreBlock>
               </div>

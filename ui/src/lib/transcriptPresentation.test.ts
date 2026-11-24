@@ -23,7 +23,13 @@ describe("describeToolInput", () => {
     ).toEqual([
       { label: "Intent", value: "Inspect the issue chat thread layout classes", tone: "default" },
       { label: "Directory", value: "/workspace/paperclip", tone: "default" },
+      { label: "Command", value: "sed -n \"1,220p\" ui/src/components/IssueChatThread.tsx", tone: "code" },
     ]);
+  });
+
+  it("does not truncate long commands", () => {
+    const command = `echo ${"x".repeat(500)}`;
+    expect(describeToolInput("bash", { command })).toEqual([{ label: "Command", value: command, tone: "code" }]);
   });
 
   it("surfaces concise structured details for file tools", () => {
